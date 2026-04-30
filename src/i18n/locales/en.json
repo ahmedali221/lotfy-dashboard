@@ -1,0 +1,42 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "products": "Products",
+    "orders": "Orders",
+    "appointments": "Appointments",
+    "articles": "Articles",
+    "users": "Users",
+    "branches": "Branches",
+    "settings": "Settings",
+    "paymentMethods": "Payment Methods",
+    "logout": "Logout"
+  },
+  "common": {
+    "search": "Search",
+    "add": "Add",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "status": "Status",
+    "actions": "Actions",
+    "all": "All",
+    "active": "Active",
+    "inactive": "Inactive",
+    "loading": "Loading...",
+    "noData": "No data found",
+    "confirmDelete": "Are you sure you want to delete?",
+    "deleteWarning": "This action cannot be undone.",
+    "egp": "EGP",
+    "items": "items"
+  },
+  "login": {
+    "title": "Sign In",
+    "subtitle": "LOTFY OPTICAL Admin Dashboard",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign In",
+    "error": "Invalid credentials"
+  }
+}

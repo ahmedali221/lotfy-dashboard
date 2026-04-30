@@ -1,0 +1,42 @@
+{
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "products": "المنتجات",
+    "orders": "الطلبات",
+    "appointments": "المواعيد",
+    "articles": "المقالات",
+    "users": "المستخدمين",
+    "branches": "الفروع",
+    "settings": "الإعدادات",
+    "paymentMethods": "طرق الدفع",
+    "logout": "تسجيل الخروج"
+  },
+  "common": {
+    "search": "بحث",
+    "add": "إضافة",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "status": "الحالة",
+    "actions": "الإجراءات",
+    "all": "الكل",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "loading": "جار التحميل...",
+    "noData": "لا توجد بيانات",
+    "confirmDelete": "هل أنت متأكد من الحذف؟",
+    "deleteWarning": "لا يمكن التراجع عن هذا الإجراء.",
+    "egp": "ج.م",
+    "items": "منتج"
+  },
+  "login": {
+    "title": "تسجيل الدخول",
+    "subtitle": "لوحة تحكم لطفي للبصريات",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "submit": "دخول",
+    "error": "بيانات غير صحيحة"
+  }
+}
