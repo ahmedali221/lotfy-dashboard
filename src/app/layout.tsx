@@ -5,6 +5,7 @@ import { Providers } from './providers';
 export const metadata: Metadata = {
   title: 'لوحة التحكم | لطفي للبصريات',
   description: 'لوحة التحكم الإدارية — لطفي للبصريات',
+  icons: { icon: '/logo.png' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

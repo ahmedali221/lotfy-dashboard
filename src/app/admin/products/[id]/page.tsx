@@ -11,8 +11,16 @@ import {
   Package,
   Tag,
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import api from '@/lib/axios';
+
+interface ProductImage {
+  id: number;
+  image: string;
+  sort_order: number;
+}
 
 interface ApiProduct {
   id: number;
@@ -21,11 +29,15 @@ interface ApiProduct {
   category: string;
   gender: string;
   frame_shape: string | null;
+  lens_type: string;
+  colour: string;
   price: string;
+  previous_price: string | null;
   stock_quantity: number;
   low_stock_threshold: number;
+  description: string;
   is_active: boolean;
-  image: string;
+  images: ProductImage[];
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -37,9 +49,10 @@ function resolveImageUrl(url: string): string {
 }
 
 const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
-  frame:     { ar: 'إطارات',      en: 'Frames'      },
-  lens:      { ar: 'عدسات',       en: 'Lenses'      },
-  accessory: { ar: 'إكسسوارات',   en: 'Accessories' },
+  lens:            { ar: 'عدسات',          en: 'Lenses'          },
+  glasses:         { ar: 'نظارات',         en: 'Glasses'         },
+  light_filters:   { ar: 'فلاتر ضوئية',    en: 'Light Filters'   },
+  artificial_eyes: { ar: 'عيون اصطناعية',  en: 'Artificial Eyes' },
 };
 
 const GENDER_LABELS: Record<string, { ar: string; en: string }> = {
@@ -57,6 +70,23 @@ const FRAME_SHAPE_LABELS: Record<string, { ar: string; en: string }> = {
   oval:      { ar: 'بيضاوي', en: 'Oval'      },
 };
 
+/** Fields that are relevant per category */
+const CATEGORY_FIELDS: Record<string, { frame_shape: boolean; lens_type: boolean; colour: boolean; gender: boolean }> = {
+  glasses:         { frame_shape: true,  lens_type: true,  colour: true,  gender: true  },
+  lens:            { frame_shape: false, lens_type: true,  colour: true,  gender: false },
+  light_filters:   { frame_shape: false, lens_type: false, colour: true,  gender: false },
+  artificial_eyes: { frame_shape: false, lens_type: false, colour: true,  gender: false },
+};
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-start text-sm gap-4">
+      <dt className="text-muted-foreground shrink-0">{label}</dt>
+      <dd className="font-medium text-secondary text-right">{value}</dd>
+    </div>
+  );
+}
+
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -67,10 +97,11 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toggling, setToggling] = useState(false);
+  const [imgIndex, setImgIndex] = useState(0);
 
   useEffect(() => {
     api.get(`/api/catalog/products/${id}/`)
-      .then(({ data }) => setProduct(data))
+      .then(({ data }) => { setProduct(data); setImgIndex(0); })
       .catch(() => setError(t('فشل تحميل المنتج', 'Failed to load product')))
       .finally(() => setLoading(false));
   }, [id]);
@@ -89,6 +120,10 @@ export default function ProductDetailPage() {
   const isLowStock = product
     ? product.stock_quantity > 0 && product.stock_quantity <= product.low_stock_threshold
     : false;
+
+  const fields = product ? (CATEGORY_FIELDS[product.category] ?? { frame_shape: false, lens_type: false, colour: false, gender: true }) : null;
+  const images = product?.images ?? [];
+  const currentImage = images[imgIndex];
 
   return (
     <AdminLayout>
@@ -141,23 +176,79 @@ export default function ProductDetailPage() {
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">{error}</div>
         )}
 
-        {product && (
+        {product && fields && (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
 
             {/* Image panel */}
-            <div className="md:col-span-2 bg-card rounded-2xl border border-border overflow-hidden">
-              {product.image ? (
-                <img
-                  src={resolveImageUrl(product.image)}
-                  alt={product.name}
-                  className="w-full h-72 md:h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-72 md:h-full flex flex-col items-center justify-center text-muted-foreground gap-3">
-                  <Package className="w-16 h-16 opacity-20" />
-                  <p className="text-sm">{t('لا توجد صورة', 'No image')}</p>
+            <div className="md:col-span-2 space-y-3">
+              <div className="bg-card rounded-2xl border border-border overflow-hidden relative">
+                {currentImage ? (
+                  <img
+                    src={resolveImageUrl(currentImage.image)}
+                    alt={product.name}
+                    className="w-full h-72 object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-72 flex flex-col items-center justify-center text-muted-foreground gap-3">
+                    <Package className="w-16 h-16 opacity-20" />
+                    <p className="text-sm">{t('لا توجد صورة', 'No image')}</p>
+                  </div>
+                )}
+
+                {/* Prev / Next arrows */}
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setImgIndex(i => (i - 1 + images.length) % images.length)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1 transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setImgIndex(i => (i + 1) % images.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1 transition-colors"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {images.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setImgIndex(i)}
+                          className={`w-2 h-2 rounded-full transition-colors ${i === imgIndex ? 'bg-white' : 'bg-white/50'}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Thumbnail strip */}
+              {images.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {images.map((img, i) => (
+                    <button
+                      key={img.id}
+                      onClick={() => setImgIndex(i)}
+                      className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                        i === imgIndex ? 'border-primary' : 'border-transparent'
+                      }`}
+                    >
+                      <img
+                        src={resolveImageUrl(img.image)}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  ))}
                 </div>
               )}
+
+              <p className="text-xs text-muted-foreground text-center">
+                {images.length > 0
+                  ? t(`${images.length} صورة`, `${images.length} image${images.length !== 1 ? 's' : ''}`)
+                  : t('لا توجد صور', 'No images')}
+              </p>
             </div>
 
             {/* Details panel */}
@@ -181,6 +272,11 @@ export default function ProductDetailPage() {
                     {product.brand.name}
                   </div>
                 )}
+                {product.description && (
+                  <p className="text-sm text-muted-foreground mt-3 leading-relaxed border-t border-border pt-3">
+                    {product.description}
+                  </p>
+                )}
               </div>
 
               {/* Price + stock */}
@@ -191,6 +287,11 @@ export default function ProductDetailPage() {
                     {parseFloat(product.price).toLocaleString()}
                     <span className="text-sm font-normal text-muted-foreground ms-1">{t('ج.م', 'EGP')}</span>
                   </p>
+                  {product.previous_price && (
+                    <p className="text-xs text-muted-foreground line-through mt-1">
+                      {parseFloat(product.previous_price).toLocaleString()} {t('ج.م', 'EGP')}
+                    </p>
+                  )}
                 </div>
                 <div className={`bg-card rounded-2xl border p-5 ${isLowStock ? 'border-red-200 bg-red-50' : 'border-border'}`}>
                   <p className="text-xs text-muted-foreground mb-1">{t('المخزون', 'Stock')}</p>
@@ -206,40 +307,64 @@ export default function ProductDetailPage() {
                 </div>
               </div>
 
-              {/* Attributes */}
+              {/* Attributes — common + category-specific */}
               <div className="bg-card rounded-2xl border border-border p-6">
                 <h2 className="text-sm font-semibold text-secondary mb-4">{t('التفاصيل', 'Details')}</h2>
                 <dl className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <dt className="text-muted-foreground">{t('التصنيف', 'Category')}</dt>
-                    <dd className="font-medium text-secondary">
-                      {CATEGORY_LABELS[product.category]?.[language] ?? product.category}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <dt className="text-muted-foreground">{t('الجنس', 'Gender')}</dt>
-                    <dd className="font-medium text-secondary">
-                      {GENDER_LABELS[product.gender]?.[language] ?? product.gender}
-                    </dd>
-                  </div>
-                  {product.frame_shape && (
-                    <div className="flex justify-between text-sm">
-                      <dt className="text-muted-foreground">{t('شكل الإطار', 'Frame Shape')}</dt>
-                      <dd className="font-medium text-secondary">
-                        {FRAME_SHAPE_LABELS[product.frame_shape]?.[language] ?? product.frame_shape}
-                      </dd>
-                    </div>
-                  )}
+                  <DetailRow
+                    label={t('رقم المنتج', 'Product ID')}
+                    value={`#${product.id}`}
+                  />
+                  <DetailRow
+                    label={t('التصنيف', 'Category')}
+                    value={CATEGORY_LABELS[product.category]?.[language] ?? product.category}
+                  />
                   {product.brand && (
-                    <div className="flex justify-between text-sm">
-                      <dt className="text-muted-foreground">{t('الماركة', 'Brand')}</dt>
-                      <dd className="font-medium text-secondary">{product.brand.name}</dd>
-                    </div>
+                    <DetailRow
+                      label={t('الماركة', 'Brand')}
+                      value={product.brand.name}
+                    />
                   )}
-                  <div className="flex justify-between text-sm">
-                    <dt className="text-muted-foreground">{t('رقم المنتج', 'Product ID')}</dt>
-                    <dd className="font-medium text-secondary">#{product.id}</dd>
-                  </div>
+
+                  {/* Gender — only for categories that support it */}
+                  {fields.gender && product.gender && (
+                    <DetailRow
+                      label={t('الجنس', 'Gender')}
+                      value={GENDER_LABELS[product.gender]?.[language] ?? product.gender}
+                    />
+                  )}
+
+                  {/* Frame Shape — glasses only */}
+                  {fields.frame_shape && product.frame_shape && (
+                    <DetailRow
+                      label={t('شكل الإطار', 'Frame Shape')}
+                      value={FRAME_SHAPE_LABELS[product.frame_shape]?.[language] ?? product.frame_shape}
+                    />
+                  )}
+
+                  {/* Lens Type — glasses & lens */}
+                  {fields.lens_type && product.lens_type && (
+                    <DetailRow
+                      label={t('نوع العدسة', 'Lens Type')}
+                      value={product.lens_type}
+                    />
+                  )}
+
+                  {/* Colour — glasses, lens, light_filters, artificial_eyes */}
+                  {fields.colour && product.colour && (
+                    <DetailRow
+                      label={t('اللون', 'Colour')}
+                      value={
+                        <span className="flex items-center gap-2 justify-end">
+                          <span
+                            className="inline-block w-4 h-4 rounded-full border border-border"
+                            style={{ background: product.colour }}
+                          />
+                          {product.colour}
+                        </span>
+                      }
+                    />
+                  )}
                 </dl>
               </div>
 

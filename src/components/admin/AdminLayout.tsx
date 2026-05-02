@@ -13,14 +13,28 @@ import {
   Menu,
   ChevronLeft,
   ChevronRight,
-  Globe,
+  CreditCard,
+  Truck,
+  // Calendar,
+  // FileText,
+  // MapPin,
+  // Settings,
+  // Users,
 } from 'lucide-react';
 
 const navItems = [
-  { href: '/admin/dashboard', icon: LayoutDashboard, ar: 'لوحة التحكم', en: 'Dashboard' },
-  { href: '/admin/products',  icon: Package,          ar: 'المنتجات',    en: 'Products'  },
-  { href: '/admin/brands',    icon: Tag,              ar: 'الماركات',    en: 'Brands'    },
-  { href: '/admin/orders',    icon: ShoppingCart,     ar: 'الطلبات',     en: 'Orders'    },
+  { href: '/admin/dashboard',      icon: LayoutDashboard, ar: 'لوحة التحكم', en: 'Dashboard'        },
+  { href: '/admin/products',       icon: Package,         ar: 'المنتجات',    en: 'Products'         },
+  { href: '/admin/brands',         icon: Tag,             ar: 'الماركات',    en: 'Brands'           },
+  { href: '/admin/orders',         icon: ShoppingCart,    ar: 'الطلبات',     en: 'Orders'           },
+  { href: '/admin/payment-methods',icon: CreditCard,      ar: 'طرق الدفع',   en: 'Payment Methods'  },
+  { href: '/admin/delivery-fees',  icon: Truck,           ar: 'رسوم التوصيل',en: 'Delivery Fees'    },
+  // Coming soon — pages not yet implemented:
+  // { href: '/admin/appointments', icon: Calendar,    ar: 'المواعيد',   en: 'Appointments' },
+  // { href: '/admin/articles',     icon: FileText,    ar: 'المقالات',   en: 'Articles'     },
+  // { href: '/admin/users',        icon: Users,       ar: 'المستخدمون', en: 'Users'        },
+  // { href: '/admin/branches',     icon: MapPin,      ar: 'الفروع',     en: 'Branches'     },
+  // { href: '/admin/settings',     icon: Settings,    ar: 'الإعدادات',  en: 'Settings'     },
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {

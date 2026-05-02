@@ -6,7 +6,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   Eye, Trash2, DollarSign, ShoppingCart, Truck,
-  CheckCircle, Clock, ChevronLeft, ChevronRight,
+  CheckCircle, Clock, ChevronLeft, ChevronRight, Settings2, Pencil,
 } from 'lucide-react';
 import api from '@/lib/axios';
 
@@ -87,12 +87,45 @@ export default function AdminOrdersPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Deposit modal
+  // Deposit modal (per-order)
   const [depositModal, setDepositModal] = useState<{ id: number; current: string } | null>(null);
   const [depositValue, setDepositValue] = useState('');
   const [depositSaving, setDepositSaving] = useState(false);
   const [depositError, setDepositError] = useState('');
 
+  // Checkout config (deposit_amount setting)
+  const [configDeposit, setConfigDeposit] = useState('');
+  const [configEditOpen, setConfigEditOpen] = useState(false);
+  const [configEditValue, setConfigEditValue] = useState('');
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configError, setConfigError] = useState('');
+
+
+  // Fetch checkout config once on mount
+  useEffect(() => {
+    api.get('/api/orders/checkout-config/').then(res => {
+      setConfigDeposit(res.data.deposit_amount);
+    }).catch(() => {});
+  }, []);
+
+  const handleConfigSave = async () => {
+    const val = parseFloat(configEditValue);
+    if (isNaN(val) || val < 0) {
+      setConfigError(t('يرجى إدخال رقم صحيح', 'Please enter a valid number'));
+      return;
+    }
+    setConfigSaving(true);
+    setConfigError('');
+    try {
+      const { data } = await api.patch('/api/orders/checkout-config/', { deposit_amount: val.toFixed(2) });
+      setConfigDeposit(data.deposit_amount);
+      setConfigEditOpen(false);
+    } catch {
+      setConfigError(t('فشل الحفظ', 'Failed to save'));
+    } finally {
+      setConfigSaving(false);
+    }
+  };
 
   const fetchOrders = useCallback(async (currentPage = page) => {
     setLoading(true);
@@ -192,6 +225,28 @@ export default function AdminOrdersPage() {
             <h1 className="text-3xl font-bold text-secondary mb-1">{t('إدارة الطلبات', 'Orders Management')}</h1>
             <p className="text-muted-foreground text-sm">{t('متابعة وإدارة جميع الطلبات', 'Track and manage all orders')}</p>
           </div>
+        </div>
+
+        {/* Checkout Config */}
+        <div className="bg-card rounded-xl shadow-sm border border-border p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Settings2 className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t('قيمة العربون المطلوب عند الطلب', 'Required deposit on checkout')}</p>
+              <p className="text-lg font-bold text-secondary">
+                {configDeposit ? `${parseFloat(configDeposit).toFixed(2)} ${t('ج.م', 'EGP')}` : '—'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setConfigEditValue(configDeposit); setConfigError(''); setConfigEditOpen(true); }}
+            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-dark font-medium"
+          >
+            <Pencil className="w-4 h-4" />
+            {t('تعديل', 'Edit')}
+          </button>
         </div>
 
         {/* Stats */}
@@ -373,6 +428,59 @@ export default function AdminOrdersPage() {
           )}
         </div>
       </div>
+
+      {/* ── Checkout Config Modal ── */}
+      {configEditOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Settings2 className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-secondary">{t('قيمة العربون', 'Deposit Amount')}</h3>
+                <p className="text-xs text-muted-foreground">{t('المبلغ المطلوب من العميل عند إتمام الطلب', 'Amount required from customer at checkout')}</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-secondary mb-1.5">
+                  {t('المبلغ (ج.م)', 'Amount (EGP)')}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={configEditValue}
+                  onChange={e => setConfigEditValue(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleConfigSave()}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  dir="ltr"
+                  autoFocus
+                />
+              </div>
+              {configError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{configError}</p>
+              )}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setConfigEditOpen(false)}
+                className="flex-1 px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50"
+              >
+                {t('إلغاء', 'Cancel')}
+              </button>
+              <button
+                onClick={handleConfigSave}
+                disabled={configSaving}
+                className="flex-1 px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-medium"
+              >
+                {configSaving ? t('جارٍ الحفظ...', 'Saving...') : t('حفظ', 'Save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Deposit Modal ── */}
       {depositModal && (
