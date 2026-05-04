@@ -37,13 +37,14 @@ interface ApiProduct {
   is_active: boolean;
 }
 
+type DisplayCategory = 'glasses_medical' | 'glasses_sunglasses' | 'lens' | 'light_filters' | 'artificial_eyes';
+
 interface ProductForm {
   name: string;
   brand: number | '';
-  category: 'glasses' | 'lens' | 'light_filters' | 'artificial_eyes';
+  category: DisplayCategory;
   gender: 'male' | 'female' | 'kids' | 'unisex';
   frame_shape: 'square' | 'rectangle' | 'round' | 'cat_eye' | 'oval' | '';
-  lens_type: 'medical' | 'sunglasses' | '';
   price: string;
   previous_price: string;
   stock_quantity: number | '';
@@ -53,11 +54,12 @@ interface ProductForm {
 }
 
 const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
-  all:             { ar: 'الكل',             en: 'All'            },
-  glasses:         { ar: 'نظارات',          en: 'Eyeglasses'     },
-  lens:            { ar: 'عدسات',           en: 'Lenses'         },
-  artificial_eyes: { ar: 'عيون صناعية',    en: 'Artificial Eyes' },
-  light_filters:   { ar: 'فلاتر ضوئية',    en: 'Light Filters'  },
+  all:                { ar: 'الكل',             en: 'All'                  },
+  glasses_medical:    { ar: 'نظارات النظر',     en: 'Prescription Glasses' },
+  glasses_sunglasses: { ar: 'نظارات الشمس',    en: 'Sunglasses'           },
+  lens:               { ar: 'عدسات',            en: 'Lenses'               },
+  artificial_eyes:    { ar: 'عيون صناعية',     en: 'Artificial Eyes'      },
+  light_filters:      { ar: 'فلاتر ضوئية',     en: 'Light Filters'        },
 };
 
 const PAGE_SIZE = 10;
@@ -69,11 +71,6 @@ const GENDER_LABELS: Record<string, { ar: string; en: string }> = {
   unisex: { ar: 'للجنسين',  en: 'Unisex' },
 };
 
-const LENS_TYPE_LABELS: Record<string, { ar: string; en: string }> = {
-  medical:    { ar: 'طبية',   en: 'Medical'    },
-  sunglasses: { ar: 'شمسية', en: 'Sunglasses' },
-};
-
 const FRAME_SHAPE_LABELS: Record<string, { ar: string; en: string }> = {
   square:    { ar: 'مربع',    en: 'Square'    },
   rectangle: { ar: 'مستطيل', en: 'Rectangle' },
@@ -82,7 +79,7 @@ const FRAME_SHAPE_LABELS: Record<string, { ar: string; en: string }> = {
   oval:      { ar: 'بيضاوي', en: 'Oval'      },
 };
 
-const EMPTY_FORM: ProductForm = { name: '', brand: '', category: 'glasses', gender: 'unisex', frame_shape: '', lens_type: '', price: '', previous_price: '', stock_quantity: '', low_stock_threshold: 5, colour: '', description: '' };
+const EMPTY_FORM: ProductForm = { name: '', brand: '', category: 'glasses_medical', gender: 'unisex', frame_shape: '', price: '', previous_price: '', stock_quantity: '', low_stock_threshold: 5, colour: '', description: '' };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://165.227.137.145:8080';
 
@@ -126,7 +123,15 @@ export default function AdminProductsPage() {
     try {
       const params: Record<string, string | number> = { page: currentPage, page_size: PAGE_SIZE };
       if (searchTerm) params.name = searchTerm;
-      if (categoryFilter !== 'all') params.category = categoryFilter;
+      if (categoryFilter === 'glasses_medical') {
+        params.category = 'glasses';
+        params.lens_type = 'medical';
+      } else if (categoryFilter === 'glasses_sunglasses') {
+        params.category = 'glasses';
+        params.lens_type = 'sunglasses';
+      } else if (categoryFilter !== 'all') {
+        params.category = categoryFilter;
+      }
       const { data } = await api.get('/api/catalog/products/', { params });
       setProducts(data.results);
       setTotalCount(data.count);
@@ -162,21 +167,27 @@ export default function AdminProductsPage() {
     setModalOpen(true);
   };
 
+  const toDisplayCategory = (p: ApiProduct): DisplayCategory => {
+    if (p.category === 'glasses') {
+      return p.lens_type === 'sunglasses' ? 'glasses_sunglasses' : 'glasses_medical';
+    }
+    return p.category as DisplayCategory;
+  };
+
   const openEdit = (p: ApiProduct) => {
     setEditingId(p.id);
-    setForm({ 
-      name: p.name, 
-      brand: p.brand?.id ?? '', 
-      category: p.category, 
-      gender: p.gender, 
-      frame_shape: p.frame_shape ?? '', 
-      lens_type: p.lens_type ?? '',
-      price: p.price, 
-      previous_price: p.previous_price ?? '', 
-      stock_quantity: p.stock_quantity, 
-      low_stock_threshold: p.low_stock_threshold, 
-      colour: p.colour ?? '', 
-      description: p.description ?? '' 
+    setForm({
+      name: p.name,
+      brand: p.brand?.id ?? '',
+      category: toDisplayCategory(p),
+      gender: p.gender,
+      frame_shape: p.frame_shape ?? '',
+      price: p.price,
+      previous_price: p.previous_price ?? '',
+      stock_quantity: p.stock_quantity,
+      low_stock_threshold: p.low_stock_threshold,
+      colour: p.colour ?? '',
+      description: p.description ?? ''
     });
     setFormError('');
     setExistingImages(p.images ?? []);
@@ -217,12 +228,16 @@ export default function AdminProductsPage() {
     setSaving(true);
     setFormError('');
     try {
+      const isGlasses = form.category === 'glasses_medical' || form.category === 'glasses_sunglasses';
+      const apiCategory = isGlasses ? 'glasses' : form.category;
+      const apiLensType = form.category === 'glasses_medical' ? 'medical' : form.category === 'glasses_sunglasses' ? 'sunglasses' : '';
+
       const formData = new FormData();
       formData.append('name', form.name.trim());
       if (form.brand !== '') formData.append('brand', String(form.brand));
-      formData.append('category', form.category);
+      formData.append('category', apiCategory);
       formData.append('gender', form.gender);
-      if (form.category === 'glasses' && form.frame_shape) {
+      if (isGlasses && form.frame_shape) {
         formData.append('frame_shape', form.frame_shape);
       } else {
         formData.append('frame_shape', '');
@@ -231,11 +246,7 @@ export default function AdminProductsPage() {
       if (form.previous_price) formData.append('previous_price', form.previous_price);
       formData.append('stock_quantity', String(Number(form.stock_quantity)));
       if (form.low_stock_threshold !== '') formData.append('low_stock_threshold', String(Number(form.low_stock_threshold)));
-      if (form.category === 'glasses' && form.lens_type) {
-        formData.append('lens_type', form.lens_type);
-      } else {
-        formData.append('lens_type', '');
-      }
+      formData.append('lens_type', apiLensType);
       formData.append('colour', form.colour);
       formData.append('description', form.description);
 
@@ -305,6 +316,7 @@ export default function AdminProductsPage() {
 
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
   const catLabel = (cat: string) => CATEGORY_LABELS[cat]?.[language] || cat;
+  const productCatLabel = (p: ApiProduct) => catLabel(toDisplayCategory(p));
 
   return (
     <AdminLayout>
@@ -328,8 +340,8 @@ export default function AdminProductsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: t('الإجمالي', 'Total'), value: totalCount, color: 'bg-blue-500' },
-            { label: t('نظارات شمسية', 'Sunglasses'), value: products.filter(p => p.category === 'glasses').length, color: 'bg-yellow-500' },
-            { label: t('نظارات طبية', 'Medical Glasses'), value: products.filter(p => p.category === 'lens').length, color: 'bg-purple-500' },
+            { label: t('نظارات النظر', 'Prescription'), value: products.filter(p => p.category === 'glasses' && p.lens_type !== 'sunglasses').length, color: 'bg-blue-400' },
+            { label: t('نظارات الشمس', 'Sunglasses'), value: products.filter(p => p.category === 'glasses' && p.lens_type === 'sunglasses').length, color: 'bg-yellow-500' },
             { label: t('مخزون منخفض', 'Low Stock'), value: lowStockCount, color: 'bg-red-500' },
           ].map((s, i) => (
             <div key={i} className="bg-card rounded-xl p-4 shadow-sm border border-border flex items-center gap-3">
@@ -366,9 +378,9 @@ export default function AdminProductsPage() {
           <select
             value={categoryFilter}
             onChange={e => setCategoryFilter(e.target.value)}
-            className="w-full md:w-44 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            className="w-full md:w-52 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
           >
-            {(['all', 'glasses', 'lens', 'artificial_eyes', 'light_filters'] as const).map(c => (
+            {(['all', 'glasses_medical', 'glasses_sunglasses', 'lens', 'artificial_eyes', 'light_filters'] as const).map(c => (
               <option key={c} value={c}>{catLabel(c)}</option>
             ))}
           </select>
@@ -453,7 +465,7 @@ export default function AdminProductsPage() {
                           </div>
                         </td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">{p.brand?.name ?? '—'}</td>
-                        <td className="px-5 py-4 text-sm text-secondary">{catLabel(p.category)}</td>
+                        <td className="px-5 py-4 text-sm text-secondary">{productCatLabel(p)}</td>
                         <td className="px-5 py-4 text-sm text-secondary">{GENDER_LABELS[p.gender]?.[language] ?? p.gender}</td>
                         <td className="px-5 py-4 text-sm font-medium text-secondary">
                           {parseFloat(p.price).toLocaleString()} {t('ج.م', 'EGP')}
@@ -585,7 +597,7 @@ export default function AdminProductsPage() {
                       <p className="text-sm font-semibold text-secondary truncate">{p.name}</p>
                       {p.brand && <p className="text-xs text-muted-foreground mt-0.5">{p.brand.name}</p>}
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">{catLabel(p.category)}</span>
+                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">{productCatLabel(p)}</span>
                         <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">{GENDER_LABELS[p.gender]?.[language] ?? p.gender}</span>
                       </div>
                       <p className="text-base font-bold text-primary mt-2">
@@ -750,7 +762,8 @@ export default function AdminProductsPage() {
                       onChange={e => setForm(f => ({ ...f, category: e.target.value as ProductForm['category'], frame_shape: '' }))}
                       className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     >
-                      <option value="glasses">{CATEGORY_LABELS['glasses'][language]}</option>
+                      <option value="glasses_medical">{CATEGORY_LABELS['glasses_medical'][language]}</option>
+                      <option value="glasses_sunglasses">{CATEGORY_LABELS['glasses_sunglasses'][language]}</option>
                       <option value="lens">{CATEGORY_LABELS['lens'][language]}</option>
                       <option value="artificial_eyes">{CATEGORY_LABELS['artificial_eyes'][language]}</option>
                       <option value="light_filters">{CATEGORY_LABELS['light_filters'][language]}</option>
@@ -772,38 +785,21 @@ export default function AdminProductsPage() {
                   </div>
                 </div>
 
-                {form.category === 'glasses' && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-secondary mb-1">
-                        {t('نوع النظارة', 'Lens Type')}
-                      </label>
-                      <select
-                        value={form.lens_type}
-                        onChange={e => setForm(f => ({ ...f, lens_type: e.target.value as ProductForm['lens_type'] }))}
-                        className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="">{t('غير محدد', 'Not specified')}</option>
-                        {(['medical', 'sunglasses'] as const).map(lt => (
-                          <option key={lt} value={lt}>{LENS_TYPE_LABELS[lt][language]}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-secondary mb-1">
-                        {t('شكل الإطار', 'Frame Shape')}
-                      </label>
-                      <select
-                        value={form.frame_shape}
-                        onChange={e => setForm(f => ({ ...f, frame_shape: e.target.value as ProductForm['frame_shape'] }))}
-                        className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="">{t('غير محدد', 'Not specified')}</option>
-                        {(['square', 'rectangle', 'round', 'cat_eye', 'oval'] as const).map(s => (
-                          <option key={s} value={s}>{FRAME_SHAPE_LABELS[s][language]}</option>
-                        ))}
-                      </select>
-                    </div>
+                {(form.category === 'glasses_medical' || form.category === 'glasses_sunglasses') && (
+                  <div>
+                    <label className="block text-sm font-medium text-secondary mb-1">
+                      {t('شكل الإطار', 'Frame Shape')}
+                    </label>
+                    <select
+                      value={form.frame_shape}
+                      onChange={e => setForm(f => ({ ...f, frame_shape: e.target.value as ProductForm['frame_shape'] }))}
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">{t('غير محدد', 'Not specified')}</option>
+                      {(['square', 'rectangle', 'round', 'cat_eye', 'oval'] as const).map(s => (
+                        <option key={s} value={s}>{FRAME_SHAPE_LABELS[s][language]}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
 

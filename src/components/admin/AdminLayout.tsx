@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
@@ -15,26 +15,18 @@ import {
   ChevronRight,
   CreditCard,
   Truck,
-  // Calendar,
-  // FileText,
-  // MapPin,
-  // Settings,
-  // Users,
+  Settings,
+  Newspaper,
 } from 'lucide-react';
 
-const navItems = [
+const baseNavItems = [
   { href: '/admin/dashboard',      icon: LayoutDashboard, ar: 'لوحة التحكم', en: 'Dashboard'        },
   { href: '/admin/products',       icon: Package,         ar: 'المنتجات',    en: 'Products'         },
   { href: '/admin/brands',         icon: Tag,             ar: 'الماركات',    en: 'Brands'           },
+  { href: '/admin/articles',       icon: Newspaper,       ar: 'المقالات',    en: 'Articles'         },
   { href: '/admin/orders',         icon: ShoppingCart,    ar: 'الطلبات',     en: 'Orders'           },
   { href: '/admin/payment-methods',icon: CreditCard,      ar: 'طرق الدفع',   en: 'Payment Methods'  },
   { href: '/admin/delivery-fees',  icon: Truck,           ar: 'رسوم التوصيل',en: 'Delivery Fees'    },
-  // Coming soon — pages not yet implemented:
-  // { href: '/admin/appointments', icon: Calendar,    ar: 'المواعيد',   en: 'Appointments' },
-  // { href: '/admin/articles',     icon: FileText,    ar: 'المقالات',   en: 'Articles'     },
-  // { href: '/admin/users',        icon: Users,       ar: 'المستخدمون', en: 'Users'        },
-  // { href: '/admin/branches',     icon: MapPin,      ar: 'الفروع',     en: 'Branches'     },
-  // { href: '/admin/settings',     icon: Settings,    ar: 'الإعدادات',  en: 'Settings'     },
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -44,6 +36,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isRTL = language === 'ar';
+
+  const navItems = [...baseNavItems, { href: '/admin/settings', icon: Settings, ar: 'الإعدادات', en: 'Settings' }];
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
@@ -160,9 +154,13 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
               <span className="text-white text-sm font-bold">A</span>
             </div>
-            <span className="text-sm font-medium text-secondary hidden sm:block">
-              {language === 'ar' ? 'المدير' : 'Admin'}
-            </span>
+            <div className="hidden sm:block">
+              <span className="text-sm font-medium text-secondary block leading-tight">
+                {(() => {
+                  try { return JSON.parse(localStorage.getItem('adminUser') || '{}').name || (language === 'ar' ? 'المدير' : 'Admin'); } catch { return language === 'ar' ? 'المدير' : 'Admin'; }
+                })()}
+              </span>
+            </div>
           </div>
         </header>
 
