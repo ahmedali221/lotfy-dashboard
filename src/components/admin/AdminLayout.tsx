@@ -17,7 +17,7 @@ import {
   Truck,
   Settings,
   Newspaper,
-  UserPlus,
+  Users,
 } from 'lucide-react';
 
 const baseNavItems = [
@@ -28,18 +28,29 @@ const baseNavItems = [
   { href: '/admin/orders',         icon: ShoppingCart,    ar: 'الطلبات',     en: 'Orders'           },
   { href: '/admin/payment-methods',icon: CreditCard,      ar: 'طرق الدفع',   en: 'Payment Methods'  },
   { href: '/admin/delivery-fees',  icon: Truck,           ar: 'رسوم التوصيل',en: 'Delivery Fees'    },
-  { href: '/admin/staff/signup',   icon: UserPlus,        ar: 'إضافة موظف',  en: 'Add Staff'        },
+  { href: '/admin/staff',           icon: Users,           ar: 'الموظفون',    en: 'Staff'            },
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {
-  const { language, toggleLanguage } = useLanguage();
+  const { language } = useLanguage();
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isSuperuser, setIsSuperuser] = useState(false);
   const isRTL = language === 'ar';
 
-  const navItems = [...baseNavItems, { href: '/admin/settings', icon: Settings, ar: 'الإعدادات', en: 'Settings' }];
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('adminUser');
+      setIsSuperuser(JSON.parse(raw ?? '{}')?.is_superuser === true);
+    } catch { setIsSuperuser(false); }
+  }, []);
+
+  const navItems = [
+    ...baseNavItems,
+    ...(isSuperuser ? [{ href: '/admin/settings', icon: Settings, ar: 'الإعدادات', en: 'Settings' }] : []),
+  ];
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
