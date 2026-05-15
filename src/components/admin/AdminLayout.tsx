@@ -28,7 +28,6 @@ const baseNavItems = [
   { href: '/admin/orders',         icon: ShoppingCart,    ar: 'الطلبات',     en: 'Orders'           },
   { href: '/admin/payment-methods',icon: CreditCard,      ar: 'طرق الدفع',   en: 'Payment Methods'  },
   { href: '/admin/delivery-fees',  icon: Truck,           ar: 'رسوم التوصيل',en: 'Delivery Fees'    },
-  { href: '/admin/staff',           icon: Users,           ar: 'الموظفون',    en: 'Staff'            },
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -49,7 +48,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   const navItems = [
     ...baseNavItems,
-    ...(isSuperuser ? [{ href: '/admin/settings', icon: Settings, ar: 'الإعدادات', en: 'Settings' }] : []),
+    ...(isSuperuser ? [
+      { href: '/admin/staff',    icon: Users,     ar: 'الموظفون',  en: 'Staff'    },
+      { href: '/admin/settings', icon: Settings,  ar: 'الإعدادات', en: 'Settings' },
+    ] : []),
   ];
 
   const handleLogout = () => {

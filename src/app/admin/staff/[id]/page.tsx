@@ -28,9 +28,11 @@ export default function StaffDetailPage() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem('adminUser');
-      setIsSuperuser(JSON.parse(raw ?? '{}')?.is_superuser === true);
-    } catch { setIsSuperuser(false); }
-  }, []);
+      const superuser = JSON.parse(raw ?? '{}')?.is_superuser === true;
+      if (!superuser) { router.replace('/admin/dashboard'); return; }
+      setIsSuperuser(true);
+    } catch { router.replace('/admin/dashboard'); }
+  }, [router]);
 
   const [staff, setStaff] = useState<StaffMember | null>(null);
   const [loading, setLoading] = useState(true);

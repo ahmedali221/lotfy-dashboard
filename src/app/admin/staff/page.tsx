@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Trash2, Users, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
@@ -18,15 +19,18 @@ interface StaffMember {
 
 export default function AdminStaffPage() {
   const { language } = useLanguage();
+  const router = useRouter();
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
   const [isSuperuser, setIsSuperuser] = useState(false);
   useEffect(() => {
     try {
       const raw = localStorage.getItem('adminUser');
-      setIsSuperuser(JSON.parse(raw ?? '{}')?.is_superuser === true);
-    } catch { setIsSuperuser(false); }
-  }, []);
+      const superuser = JSON.parse(raw ?? '{}')?.is_superuser === true;
+      if (!superuser) { router.replace('/admin/dashboard'); return; }
+      setIsSuperuser(true);
+    } catch { router.replace('/admin/dashboard'); }
+  }, [router]);
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
