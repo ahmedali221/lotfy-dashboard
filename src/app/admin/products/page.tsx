@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Plus, Pencil, PowerOff, Trash2, Package, AlertTriangle, ChevronLeft, ChevronRight, Upload, XCircle, LayoutList, LayoutGrid } from 'lucide-react';
+import { Search, Plus, Pencil, PowerOff, Trash2, Package, AlertTriangle, ChevronLeft, ChevronRight, LayoutList, LayoutGrid } from 'lucide-react';
 import api from '@/lib/axios';
 
 interface ApiBrand {
@@ -17,6 +16,7 @@ interface ApiProductImage {
   id: number;
   image: string;
   sort_order: number;
+  colour: string;
 }
 
 interface ApiProduct {
@@ -31,27 +31,12 @@ interface ApiProduct {
   previous_price: string | null;
   stock_quantity: number;
   low_stock_threshold: number;
-  colour: string;
   description: string;
   images: ApiProductImage[];
   is_active: boolean;
 }
 
 type DisplayCategory = 'glasses_medical' | 'glasses_sunglasses' | 'lens' | 'light_filters' | 'artificial_eyes';
-
-interface ProductForm {
-  name: string;
-  brand: number | '';
-  category: DisplayCategory;
-  gender: 'male' | 'female' | 'kids' | 'unisex';
-  frame_shape: 'square' | 'rectangle' | 'round' | 'cat_eye' | 'oval' | '';
-  price: string;
-  previous_price: string;
-  stock_quantity: number | '';
-  low_stock_threshold: number | '';
-  colour: string;
-  description: string;
-}
 
 const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
   all:                { ar: 'الكل',             en: 'All'                  },
@@ -71,16 +56,6 @@ const GENDER_LABELS: Record<string, { ar: string; en: string }> = {
   unisex: { ar: 'للجنسين',  en: 'Unisex' },
 };
 
-const FRAME_SHAPE_LABELS: Record<string, { ar: string; en: string }> = {
-  square:    { ar: 'مربع',    en: 'Square'    },
-  rectangle: { ar: 'مستطيل', en: 'Rectangle' },
-  round:     { ar: 'دائري',  en: 'Round'     },
-  cat_eye:   { ar: 'كات آي', en: 'Cat Eye'   },
-  oval:      { ar: 'بيضاوي', en: 'Oval'      },
-};
-
-const EMPTY_FORM: ProductForm = { name: '', brand: '', category: 'glasses_medical', gender: 'unisex', frame_shape: '', price: '', previous_price: '', stock_quantity: '', low_stock_threshold: 5, colour: '', description: '' };
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://165.227.137.145:8080';
 
 function resolveImageUrl(url: string): string {
@@ -98,24 +73,13 @@ export default function AdminProductsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
-  const [brands, setBrands] = useState<ApiBrand[]>([]);
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
   const [toggleId, setToggleId] = useState<{ id: number; active: boolean } | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
-  const [formError, setFormError] = useState('');
-  const [existingImages, setExistingImages] = useState<ApiProductImage[]>([]);
-  const [newImages, setNewImages] = useState<{ file: File; preview: string }[]>([]);
-  const [deletedImageIds, setDeletedImageIds] = useState<number[]>([]);
-  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(async (currentPage = page) => {
     setLoading(true);
@@ -146,149 +110,16 @@ export default function AdminProductsPage() {
     fetchProducts();
   }, [fetchProducts]);
 
-  useEffect(() => {
-    api.get('/api/catalog/brands/', { params: { page_size: 100 } })
-      .then(({ data }) => setBrands(data.results ?? data))
-      .catch(() => {});
-  }, []);
-
   // Reset to page 1 on filter/search change
   useEffect(() => {
     setPage(1);
   }, [searchTerm, categoryFilter]);
-
-  const openAdd = () => {
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-    setFormError('');
-    setExistingImages([]);
-    setNewImages([]);
-    setDeletedImageIds([]);
-    setModalOpen(true);
-  };
 
   const toDisplayCategory = (p: ApiProduct): DisplayCategory => {
     if (p.category === 'glasses') {
       return p.lens_type === 'sunglasses' ? 'glasses_sunglasses' : 'glasses_medical';
     }
     return p.category as DisplayCategory;
-  };
-
-  const openEdit = (p: ApiProduct) => {
-    setEditingId(p.id);
-    setForm({
-      name: p.name,
-      brand: p.brand?.id ?? '',
-      category: toDisplayCategory(p),
-      gender: p.gender,
-      frame_shape: p.frame_shape ?? '',
-      price: p.price,
-      previous_price: p.previous_price ?? '',
-      stock_quantity: p.stock_quantity,
-      low_stock_threshold: p.low_stock_threshold,
-      colour: p.colour ?? '',
-      description: p.description ?? ''
-    });
-    setFormError('');
-    setExistingImages(p.images ?? []);
-    setNewImages([]);
-    setDeletedImageIds([]);
-    setModalOpen(true);
-  };
-
-  const handleAddImages = (files: FileList | null) => {
-    if (!files) return;
-    const added = Array.from(files)
-      .filter(f => f.type.startsWith('image/'))
-      .map(file => ({ file, preview: URL.createObjectURL(file) }));
-    setNewImages(prev => [...prev, ...added]);
-  };
-
-  const removeExistingImage = (id: number) => {
-    setDeletedImageIds(prev => [...prev, id]);
-    setExistingImages(prev => prev.filter(img => img.id !== id));
-  };
-
-  const removeNewImage = (index: number) => {
-    setNewImages(prev => {
-      URL.revokeObjectURL(prev[index].preview);
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
-  const handleSave = async () => {
-    if (!form.name.trim() || !form.price || form.stock_quantity === '') {
-      setFormError(language === 'ar' ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
-      return;
-    }
-    if (existingImages.length === 0 && newImages.length === 0) {
-      setFormError(language === 'ar' ? 'يرجى إضافة صورة واحدة على الأقل للمنتج' : 'Please add at least one product image');
-      return;
-    }
-    setSaving(true);
-    setFormError('');
-    try {
-      const isGlasses = form.category === 'glasses_medical' || form.category === 'glasses_sunglasses';
-      const apiCategory = isGlasses ? 'glasses' : form.category;
-      const apiLensType = form.category === 'glasses_medical' ? 'medical' : form.category === 'glasses_sunglasses' ? 'sunglasses' : '';
-
-      const formData = new FormData();
-      formData.append('name', form.name.trim());
-      if (form.brand !== '') formData.append('brand', String(form.brand));
-      formData.append('category', apiCategory);
-      formData.append('gender', form.gender);
-      if (isGlasses && form.frame_shape) {
-        formData.append('frame_shape', form.frame_shape);
-      } else {
-        formData.append('frame_shape', '');
-      }
-      formData.append('price', form.price);
-      if (form.previous_price) formData.append('previous_price', form.previous_price);
-      formData.append('stock_quantity', String(Number(form.stock_quantity)));
-      if (form.low_stock_threshold !== '') formData.append('low_stock_threshold', String(Number(form.low_stock_threshold)));
-      formData.append('lens_type', apiLensType);
-      formData.append('colour', form.colour);
-      formData.append('description', form.description);
-
-      let productId: number;
-      if (editingId) {
-        await api.patch(`/api/catalog/products/${editingId}/`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        productId = editingId;
-      } else {
-        const { data } = await api.post('/api/catalog/products/', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        productId = data.id;
-      }
-
-      // Delete removed images
-      await Promise.all(
-        deletedImageIds.map(id =>
-          api.delete(`/api/catalog/products/${productId}/images/${id}/`)
-        )
-      );
-
-      // Upload new images sequentially to preserve order
-      for (const img of newImages) {
-        const imgData = new FormData();
-        imgData.append('image', img.file);
-        await api.post(`/api/catalog/products/${productId}/images/`, imgData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      }
-
-      setModalOpen(false);
-      fetchProducts();
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setFormError(firstMsg || (language === 'ar' ? 'فشل الحفظ، حاول مرة أخرى' : 'Failed to save, please try again'));
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleToggleActive = async () => {
@@ -328,7 +159,7 @@ export default function AdminProductsPage() {
             <p className="text-muted-foreground text-sm">{t('إدارة جميع المنتجات', 'Manage all products')}</p>
           </div>
           <button
-            onClick={openAdd}
+            onClick={() => router.push('/admin/products/new')}
             className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-md"
           >
             <Plus className="w-4 h-4" />
@@ -483,7 +314,7 @@ export default function AdminProductsPage() {
                         </td>
                         <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors" title={t('تعديل', 'Edit')}>
+                            <button onClick={() => router.push(`/admin/products/${p.id}/edit`)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors" title={t('تعديل', 'Edit')}>
                               <Pencil className="w-4 h-4" />
                             </button>
                             <button
@@ -576,7 +407,7 @@ export default function AdminProductsPage() {
                         onClick={e => e.stopPropagation()}
                         className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-200 flex justify-end gap-2"
                       >
-                        <button onClick={() => openEdit(p)} className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-blue-50 transition-colors" title={t('تعديل', 'Edit')}>
+                        <button onClick={() => router.push(`/admin/products/${p.id}/edit`)} className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-blue-50 transition-colors" title={t('تعديل', 'Edit')}>
                           <Pencil className="w-3.5 h-3.5 text-blue-600" />
                         </button>
                         <button
@@ -626,297 +457,6 @@ export default function AdminProductsPage() {
           </div>
         )}
       </div>
-
-      {/* Add/Edit Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
-
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-7 py-5 border-b border-border">
-              <div>
-                <h3 className="text-xl font-bold text-secondary">
-                  {editingId ? t('تعديل المنتج', 'Edit Product') : t('منتج جديد', 'New Product')}
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {editingId ? t('تحديث بيانات المنتج', 'Update product details') : t('أدخل بيانات المنتج الجديد', 'Enter new product details')}
-                </p>
-              </div>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-muted-foreground transition-colors"
-              >
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body — two-column layout */}
-            <div className="grid grid-cols-5 gap-0 divide-x divide-border rtl:divide-x-reverse">
-
-              {/* Left: Multi-Image Manager */}
-              <div className="col-span-2 p-6 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-secondary">{t('صور المنتج', 'Product Images')}</p>
-                  <span className="text-xs text-muted-foreground">
-                    {existingImages.length + newImages.length} {t('صورة', 'images')}
-                  </span>
-                </div>
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={e => { handleAddImages(e.target.files); e.target.value = ''; }}
-                />
-                <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[300px] pr-0.5">
-                  {existingImages.map((img, i) => (
-                    <div key={img.id} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group border border-border">
-                      <img src={resolveImageUrl(img.image)} alt="" className="w-full h-full object-cover" />
-                      {i === 0 && (
-                        <span className="absolute top-1 start-1 text-[10px] bg-primary text-white px-1.5 py-0.5 rounded font-medium leading-none">
-                          {t('رئيسية', 'Thumb')}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeExistingImage(img.id)}
-                        className="absolute top-1 end-1 w-5 h-5 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <XCircle className="w-3.5 h-3.5 text-red-500" />
-                      </button>
-                    </div>
-                  ))}
-                  {newImages.map((img, i) => (
-                    <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group border border-yellow-300">
-                      <img src={img.preview} alt="" className="w-full h-full object-cover" />
-                      {existingImages.length === 0 && i === 0 && (
-                        <span className="absolute top-1 start-1 text-[10px] bg-primary text-white px-1.5 py-0.5 rounded font-medium leading-none">
-                          {t('رئيسية', 'Thumb')}
-                        </span>
-                      )}
-                      <span className="absolute bottom-1 start-1 text-[10px] bg-yellow-500 text-white px-1.5 py-0.5 rounded leading-none">
-                        {t('جديد', 'New')}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeNewImage(i)}
-                        className="absolute top-1 end-1 w-5 h-5 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <XCircle className="w-3.5 h-3.5 text-red-500" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => imageInputRef.current?.click()}
-                    className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary flex flex-col items-center justify-center gap-1.5 transition-colors text-muted-foreground hover:text-primary"
-                  >
-                    <Upload className="w-5 h-5" />
-                    <span className="text-[11px] font-medium">{t('إضافة', 'Add')}</span>
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t('الصورة الأولى هي الصورة الرئيسية (Thumbnail)', 'First image is used as the thumbnail')}
-                </p>
-              </div>
-
-              {/* Right: Form Fields */}
-              <div className="col-span-3 p-6 space-y-4">
-
-                <div>
-                  <label className="block text-sm font-medium text-secondary mb-1">
-                    {t('اسم المنتج', 'Product Name')} <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder={t('مثال: نظارة Ray-Ban', 'e.g. Ray-Ban Sunglasses')}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-secondary mb-1">
-                    {t('الماركة', 'Brand')}
-                  </label>
-                  <select
-                    value={form.brand}
-                    onChange={e => setForm(f => ({ ...f, brand: e.target.value === '' ? '' : Number(e.target.value) }))}
-                    className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">{t('بدون ماركة', 'No brand')}</option>
-                    {brands.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('التصنيف', 'Category')} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={form.category}
-                      onChange={e => setForm(f => ({ ...f, category: e.target.value as ProductForm['category'], frame_shape: '' }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="glasses_medical">{CATEGORY_LABELS['glasses_medical'][language]}</option>
-                      <option value="glasses_sunglasses">{CATEGORY_LABELS['glasses_sunglasses'][language]}</option>
-                      <option value="lens">{CATEGORY_LABELS['lens'][language]}</option>
-                      <option value="artificial_eyes">{CATEGORY_LABELS['artificial_eyes'][language]}</option>
-                      <option value="light_filters">{CATEGORY_LABELS['light_filters'][language]}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('الجنس', 'Gender')} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={form.gender}
-                      onChange={e => setForm(f => ({ ...f, gender: e.target.value as ProductForm['gender'] }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      {(['male', 'female', 'kids', 'unisex'] as const).map(g => (
-                        <option key={g} value={g}>{GENDER_LABELS[g][language]}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {(form.category === 'glasses_medical' || form.category === 'glasses_sunglasses') && (
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('شكل الإطار', 'Frame Shape')}
-                    </label>
-                    <select
-                      value={form.frame_shape}
-                      onChange={e => setForm(f => ({ ...f, frame_shape: e.target.value as ProductForm['frame_shape'] }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="">{t('غير محدد', 'Not specified')}</option>
-                      {(['square', 'rectangle', 'round', 'cat_eye', 'oval'] as const).map(s => (
-                        <option key={s} value={s}>{FRAME_SHAPE_LABELS[s][language]}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('السعر (ج.م)', 'Price (EGP)')} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.price}
-                      onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('السعر قبل الخصم (ج.م)', 'Previous Price (EGP)')}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.previous_price}
-                      onChange={e => setForm(f => ({ ...f, previous_price: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('الكمية في المخزون', 'Stock Quantity')} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.stock_quantity}
-                      onChange={e => setForm(f => ({ ...f, stock_quantity: e.target.value === '' ? '' : Number(e.target.value) }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('حد المخزون المنخفض', 'Low Stock Threshold')}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.low_stock_threshold}
-                      onChange={e => setForm(f => ({ ...f, low_stock_threshold: e.target.value === '' ? '' : Number(e.target.value) }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="5"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                      {t('اللون', 'Colour')}
-                    </label>
-                    <input
-                      value={form.colour}
-                      onChange={e => setForm(f => ({ ...f, colour: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder={t('مثال: أسود، ذهبي', 'e.g. Black, Gold')}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-secondary mb-1">
-                    {t('الوصف', 'Description')}
-                  </label>
-                  <textarea
-                    value={form.description}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    rows={3}
-                    className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-                    placeholder={t('وصف المنتج...', 'Product description...')}
-                  />
-                </div>
-
-                {formError && (
-                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    {formError}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex justify-end gap-3 px-7 py-4 border-t border-border bg-gray-50/50 rounded-b-2xl">
-              <button
-                onClick={() => setModalOpen(false)}
-                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-100 transition-colors"
-              >
-                {t('إلغاء', 'Cancel')}
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                {saving ? t('جارٍ الحفظ...', 'Saving...') : t('حفظ المنتج', 'Save Product')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Toggle Active Confirm */}
       {toggleId && (

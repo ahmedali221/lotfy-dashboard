@@ -20,6 +20,7 @@ interface ProductImage {
   id: number;
   image: string;
   sort_order: number;
+  colour: string;
 }
 
 interface ApiProduct {
@@ -30,7 +31,6 @@ interface ApiProduct {
   gender: string;
   frame_shape: string | null;
   lens_type: string;
-  colour: string;
   price: string;
   previous_price: string | null;
   stock_quantity: number;
@@ -71,11 +71,11 @@ const FRAME_SHAPE_LABELS: Record<string, { ar: string; en: string }> = {
 };
 
 /** Fields that are relevant per category */
-const CATEGORY_FIELDS: Record<string, { frame_shape: boolean; lens_type: boolean; colour: boolean; gender: boolean }> = {
-  glasses:         { frame_shape: true,  lens_type: true,  colour: true,  gender: true  },
-  lens:            { frame_shape: false, lens_type: true,  colour: true,  gender: false },
-  light_filters:   { frame_shape: false, lens_type: false, colour: true,  gender: false },
-  artificial_eyes: { frame_shape: false, lens_type: false, colour: true,  gender: false },
+const CATEGORY_FIELDS: Record<string, { frame_shape: boolean; lens_type: boolean; gender: boolean }> = {
+  glasses:         { frame_shape: true,  lens_type: true,  gender: true  },
+  lens:            { frame_shape: false, lens_type: true,  gender: false },
+  light_filters:   { frame_shape: false, lens_type: false, gender: false },
+  artificial_eyes: { frame_shape: false, lens_type: false, gender: false },
 };
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -121,7 +121,7 @@ export default function ProductDetailPage() {
     ? product.stock_quantity > 0 && product.stock_quantity <= product.low_stock_threshold
     : false;
 
-  const fields = product ? (CATEGORY_FIELDS[product.category] ?? { frame_shape: false, lens_type: false, colour: false, gender: true }) : null;
+  const fields = product ? (CATEGORY_FIELDS[product.category] ?? { frame_shape: false, lens_type: false, gender: true }) : null;
   const images = product?.images ?? [];
   const currentImage = images[imgIndex];
 
@@ -142,7 +142,7 @@ export default function ProductDetailPage() {
           {product && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => router.push(`/admin/products?edit=${product.id}`)}
+                onClick={() => router.push(`/admin/products/${product.id}/edit`)}
                 className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50 transition-colors"
               >
                 <Pencil className="w-4 h-4" />
@@ -194,6 +194,21 @@ export default function ProductDetailPage() {
                     <p className="text-sm">{t('لا توجد صورة', 'No image')}</p>
                   </div>
                 )}
+                {/* Active colour badge */}
+                {currentImage?.colour && (
+                  <div className="absolute bottom-3 start-3 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+                    <span
+                      className="w-3 h-3 rounded-full border border-white/50 shrink-0"
+                      style={{ background: currentImage.colour }}
+                    />
+                    {currentImage.colour}
+                  </div>
+                )}
+                {imgIndex === 0 && !currentImage?.colour && images.length > 0 && (
+                  <div className="absolute bottom-3 start-3 bg-primary/80 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+                    {t('الصورة الرئيسية', 'Thumbnail')}
+                  </div>
+                )}
 
                 {/* Prev / Next arrows */}
                 {images.length > 1 && (
@@ -230,15 +245,34 @@ export default function ProductDetailPage() {
                     <button
                       key={img.id}
                       onClick={() => setImgIndex(i)}
-                      className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                        i === imgIndex ? 'border-primary' : 'border-transparent'
+                      className={`shrink-0 flex flex-col items-center gap-1.5 rounded-xl border-2 transition-colors p-1 ${
+                        i === imgIndex ? 'border-primary bg-primary/5' : 'border-transparent hover:border-border'
                       }`}
                     >
-                      <img
-                        src={resolveImageUrl(img.image)}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
+                      <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100">
+                        <img
+                          src={resolveImageUrl(img.image)}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      {img.colour ? (
+                        <div className="flex items-center gap-1">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-white shadow-sm shrink-0"
+                            style={{ background: img.colour }}
+                          />
+                          <span className="text-[9px] text-muted-foreground leading-none truncate max-w-[52px]">
+                            {img.colour}
+                          </span>
+                        </div>
+                      ) : (
+                        i === 0 && (
+                          <span className="text-[9px] text-primary font-medium leading-none">
+                            {t('رئيسية', 'Main')}
+                          </span>
+                        )
+                      )}
                     </button>
                   ))}
                 </div>
@@ -350,17 +384,33 @@ export default function ProductDetailPage() {
                     />
                   )}
 
-                  {/* Colour — glasses, lens, light_filters, artificial_eyes */}
-                  {fields.colour && product.colour && (
+                  {/* Colours — per image, clickable to jump to that image */}
+                  {images.some(img => img.colour) && (
                     <DetailRow
-                      label={t('اللون', 'Colour')}
+                      label={t('الألوان المتاحة', 'Available Colours')}
                       value={
-                        <span className="flex items-center gap-2 justify-end">
-                          <span
-                            className="inline-block w-4 h-4 rounded-full border border-border"
-                            style={{ background: product.colour }}
-                          />
-                          {product.colour}
+                        <span className="flex flex-wrap gap-2 justify-end">
+                          {images.filter(img => img.colour).map((img, i) => {
+                            const imgIdx = images.indexOf(img);
+                            const isActive = imgIdx === imgIndex;
+                            return (
+                              <button
+                                key={img.id}
+                                onClick={() => setImgIndex(imgIdx)}
+                                className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border transition-all ${
+                                  isActive
+                                    ? 'border-primary bg-primary/10 text-primary font-medium'
+                                    : 'border-border bg-gray-50 text-secondary hover:border-primary/50'
+                                }`}
+                              >
+                                <span
+                                  className="inline-block w-3 h-3 rounded-full border border-white shadow-sm shrink-0"
+                                  style={{ background: img.colour }}
+                                />
+                                {img.colour}
+                              </button>
+                            );
+                          })}
                         </span>
                       }
                     />
