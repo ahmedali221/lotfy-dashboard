@@ -47,6 +47,9 @@ export default function AdminLoginPage() {
       // Step 4: Store user info
       localStorage.setItem('adminUser', JSON.stringify(user));
 
+      const userType = user.is_superuser ? 'Superuser' : 'Staff';
+      console.log(`[Auth] Logged in as: ${userType} — ${user.email}`);
+
       // Set cookie so middleware can protect routes server-side
       document.cookie = `adminToken=${tokens.access}; path=/`;
 

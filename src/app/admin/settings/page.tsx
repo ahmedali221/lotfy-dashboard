@@ -119,6 +119,14 @@ export default function SettingsPage() {
   const router = useRouter();
   const t = (ar: string, en: string) => (language === 'ar' ? ar : en);
 
+  // Redirect non-superusers away from this page
+  useEffect(() => {
+    try {
+      const isSuperuser = JSON.parse(localStorage.getItem('adminUser') ?? '{}')?.is_superuser === true;
+      if (!isSuperuser) router.replace('/admin/dashboard');
+    } catch { router.replace('/admin/dashboard'); }
+  }, [router]);
+
   // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const showToast = (message: string, type: 'success' | 'error') => setToast({ message, type });
