@@ -77,6 +77,8 @@ export default function AdminProductsPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [colourFilter, setColourFilter] = useState('');
+  const [availableColours, setAvailableColours] = useState<string[]>([]);
 
   const [toggleId, setToggleId] = useState<{ id: number; active: boolean } | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -87,6 +89,7 @@ export default function AdminProductsPage() {
     try {
       const params: Record<string, string | number> = { page: currentPage, page_size: PAGE_SIZE };
       if (searchTerm) params.name = searchTerm;
+      if (colourFilter) params.colour = colourFilter;
       if (categoryFilter === 'glasses_medical') {
         params.category = 'glasses';
         params.lens_type = 'medical';
@@ -104,16 +107,20 @@ export default function AdminProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchTerm, categoryFilter, language]);
+  }, [page, searchTerm, categoryFilter, colourFilter, language]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
+  useEffect(() => {
+    api.get('/api/catalog/products/colours/').then(r => setAvailableColours(r.data)).catch(() => {});
+  }, []);
+
   // Reset to page 1 on filter/search change
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, categoryFilter]);
+  }, [searchTerm, categoryFilter, colourFilter]);
 
   const toDisplayCategory = (p: ApiProduct): DisplayCategory => {
     if (p.category === 'glasses') {
@@ -215,6 +222,18 @@ export default function AdminProductsPage() {
               <option key={c} value={c}>{catLabel(c)}</option>
             ))}
           </select>
+          {availableColours.length > 0 && (
+            <select
+              value={colourFilter}
+              onChange={e => setColourFilter(e.target.value)}
+              className="w-full md:w-44 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            >
+              <option value="">{t('كل الألوان', 'All Colours')}</option>
+              {availableColours.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          )}
           <div className="flex items-center gap-1 border border-border rounded-lg p-1 shrink-0">
             <button
               onClick={() => setViewMode('list')}
