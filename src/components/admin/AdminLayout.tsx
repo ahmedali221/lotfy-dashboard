@@ -175,6 +175,9 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                   try { return JSON.parse(localStorage.getItem('adminUser') || '{}').name || (language === 'ar' ? 'المدير' : 'Admin'); } catch { return language === 'ar' ? 'المدير' : 'Admin'; }
                 })()}
               </span>
+              <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${isSuperuser ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500'}`}>
+                {isSuperuser ? (language === 'ar' ? 'مشرف' : 'Superuser') : (language === 'ar' ? 'موظف' : 'Staff')}
+              </span>
             </div>
           </div>
         </header>

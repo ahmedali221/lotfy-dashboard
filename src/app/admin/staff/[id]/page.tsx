@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { ArrowLeft, ArrowRight, Users, Pencil, Trash2, Save, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Users, Pencil, Trash2, Save, X, Eye, EyeOff } from 'lucide-react';
 import api from '@/lib/axios';
 
 interface StaffMember {
   id: number;
   name: string;
   email: string;
+  phone: string;
   is_superuser: boolean;
   is_staff: boolean;
 }
@@ -39,7 +40,8 @@ export default function StaffDetailPage() {
   const [error, setError] = useState('');
 
   const [editMode, setEditMode] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', new_password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -59,8 +61,9 @@ export default function StaffDetailPage() {
 
   const openEdit = () => {
     if (!staff) return;
-    setForm({ name: staff.name, email: staff.email });
+    setForm({ name: staff.name, email: staff.email, phone: staff.phone ?? '', new_password: '' });
     setFormError('');
+    setShowPassword(false);
     setEditMode(true);
   };
 
@@ -69,13 +72,20 @@ export default function StaffDetailPage() {
       setFormError(t('يرجى ملء جميع الحقول', 'Please fill all fields'));
       return;
     }
+    if (form.new_password && form.new_password.length < 8) {
+      setFormError(t('كلمة المرور يجب أن تكون 8 أحرف على الأقل', 'Password must be at least 8 characters'));
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
-      await api.patch(`/api/auth/staff/${staffId}/`, {
+      const payload: Record<string, string> = {
         name: form.name.trim(),
         email: form.email.trim(),
-      });
+        phone: form.phone.trim(),
+      };
+      if (form.new_password) payload.new_password = form.new_password;
+      await api.patch(`/api/auth/staff/${staffId}/`, payload);
       setEditMode(false);
       fetchStaff();
     } catch (err: unknown) {
@@ -206,6 +216,49 @@ export default function StaffDetailPage() {
                   <p className="text-secondary font-medium">{staff.email}</p>
                 )}
               </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  {t('رقم الهاتف', 'Phone')}
+                </label>
+                {editMode ? (
+                  <input
+                    type="tel"
+                    value={form.phone}
+                    onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  />
+                ) : (
+                  <p className="text-secondary font-medium">{staff.phone || '—'}</p>
+                )}
+              </div>
+
+              {/* Password — edit mode only */}
+              {editMode && (
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                    {t('كلمة مرور جديدة', 'New Password')}
+                    <span className="normal-case font-normal ms-1 text-muted-foreground">({t('اتركها فارغة للإبقاء على الحالية', 'leave blank to keep current')})</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={form.new_password}
+                      onChange={e => setForm(f => ({ ...f, new_password: e.target.value }))}
+                      placeholder="••••••••"
+                      className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm pe-12"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-secondary"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Role */}
               <div>
