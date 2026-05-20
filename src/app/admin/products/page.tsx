@@ -141,11 +141,12 @@ export default function AdminProductsPage() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    setDeleteId(null);
     try {
       await api.delete(`/api/catalog/products/${deleteId}/`);
-    } finally {
-      setDeleteId(null);
       fetchProducts();
+    } catch {
+      setError(language === 'ar' ? 'فشل حذف المنتج، يرجى المحاولة مجدداً' : 'Failed to delete product, please try again');
     }
   };
 

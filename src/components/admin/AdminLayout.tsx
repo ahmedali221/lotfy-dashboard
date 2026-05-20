@@ -46,13 +46,13 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     } catch { setIsSuperuser(false); }
   }, []);
 
-  const navItems = [
-    ...baseNavItems,
-    ...(isSuperuser ? [
-      { href: '/admin/staff',    icon: Users,     ar: 'الموظفون',  en: 'Staff'    },
-      { href: '/admin/settings', icon: Settings,  ar: 'الإعدادات', en: 'Settings' },
-    ] : []),
-  ];
+  const navItems = isSuperuser
+    ? [
+        ...baseNavItems,
+        { href: '/admin/staff',    icon: Users,    ar: 'الموظفون',  en: 'Staff'    },
+        { href: '/admin/settings', icon: Settings, ar: 'الإعدادات', en: 'Settings' },
+      ]
+    : [{ href: '/admin/orders', icon: ShoppingCart, ar: 'الطلبات', en: 'Orders' }];
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
