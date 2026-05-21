@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
@@ -98,6 +98,23 @@ export default function ProductDetailPage() {
   const [error, setError] = useState('');
   const [toggling, setToggling] = useState(false);
   const [imgIndex, setImgIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const len = product?.images?.length ?? 0;
+    if (len < 2) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0) setImgIndex(i => (i + 1) % len);
+      else setImgIndex(i => (i - 1 + len) % len);
+    }
+    touchStartX.current = null;
+  };
 
   useEffect(() => {
     api.get(`/api/catalog/products/${id}/`)
@@ -181,7 +198,12 @@ export default function ProductDetailPage() {
 
             {/* Image panel */}
             <div className="md:col-span-2 space-y-3">
-              <div className="bg-card rounded-2xl border border-border overflow-hidden relative">
+              <div
+                className="bg-card rounded-2xl border border-border overflow-hidden relative"
+                style={{ touchAction: 'pan-y' }}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
                 {currentImage ? (
                   <img
                     src={resolveImageUrl(currentImage.image)}
