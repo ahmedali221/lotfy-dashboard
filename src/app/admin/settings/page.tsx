@@ -193,7 +193,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-bold text-secondary">{t('الأمان', 'Security')}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {t('إدارة كلمة المرور والجلسات النشطة', 'Manage your password and active sessions')}
+            {t('إدارة كلمة المرور وتاريخ الدخول', 'Manage your password and active sessions')}
           </p>
         </div>
 
@@ -307,7 +307,7 @@ export default function SettingsPage() {
               <Monitor className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="font-bold text-secondary">{t('الجلسات النشطة', 'Active Sessions')}</h2>
+              <h2 className="font-bold text-secondary">{t('تاريخ الدخول', 'Active Sessions')}</h2>
               <p className="text-xs text-muted-foreground">
                 {t('موظفو لوحة التحكم وآخر وقت تسجيل دخول لهم', 'Dashboard staff and their last login time')}
               </p>
