@@ -46,6 +46,10 @@ interface OrderDetail {
   modified: string;
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://165.227.137.145:8080';
+const resolveMedia = (url: string | null) =>
+  url && !url.startsWith('http') ? `${BASE_URL}${url}` : url;
+
 const STATUS_CONFIG: Record<OrderStatus, { ar: string; en: string; color: string; icon: React.ElementType }> = {
   placed:           { ar: 'قيد الانتظار',   en: 'Placed',           color: 'bg-blue-100 text-blue-700 border-blue-200',     icon: Clock       },
   approved:         { ar: 'معتمد',           en: 'Approved',         color: 'bg-indigo-100 text-indigo-700 border-indigo-200', icon: CheckCircle },
@@ -317,7 +321,7 @@ export default function OrderDetailPage() {
                               <div className="flex items-center gap-2">
                                 {item.product_image_url && (
                                   <img
-                                    src={item.product_image_url}
+                                    src={resolveMedia(item.product_image_url)!}
                                     alt={item.product_colour_snapshot || 'product'}
                                     className="w-10 h-10 rounded-lg object-cover border border-border flex-shrink-0"
                                   />
@@ -384,9 +388,9 @@ export default function OrderDetailPage() {
                 {t('إثبات الدفع', 'Proof of Payment')}
               </h2>
               {order.payment_proof ? (
-                <a href={order.payment_proof} target="_blank" rel="noopener noreferrer" className="block group">
+                <a href={resolveMedia(order.payment_proof)!} target="_blank" rel="noopener noreferrer" className="block group">
                   <img
-                    src={order.payment_proof}
+                    src={resolveMedia(order.payment_proof)!}
                     alt="Payment proof"
                     className="w-full max-w-sm rounded-xl border border-border object-cover group-hover:opacity-90 transition-opacity"
                   />
