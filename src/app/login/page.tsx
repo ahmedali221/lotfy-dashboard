@@ -26,21 +26,21 @@ export default function LoginPage() {
     try {
       const { data: tokens } = await userApi.post('/api/auth/login/', { email, password });
 
-      localStorage.setItem('userToken', tokens.access);
-      localStorage.setItem('userRefresh', tokens.refresh);
+      localStorage.setItem('customerToken', tokens.access);
+      localStorage.setItem('customerRefresh', tokens.refresh);
 
       const { data: user } = await userApi.get('/api/auth/me/');
 
       if (user.is_staff) {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userRefresh');
+        localStorage.removeItem('customerToken');
+        localStorage.removeItem('customerRefresh');
         setError(ar ? 'حسابات الموظفين تسجل الدخول من لوحة التحكم' : 'Staff accounts log in via the admin dashboard');
         setLoading(false);
         return;
       }
 
-      localStorage.setItem('userInfo', JSON.stringify(user));
-      document.cookie = `userToken=${tokens.access}; path=/`;
+      localStorage.setItem('customerUser', JSON.stringify(user));
+      document.cookie = `customerToken=${tokens.access}; path=/`;
 
       router.push('/account');
     } catch (err: unknown) {

@@ -6,9 +6,25 @@ const userApi = axios.create({
   baseURL: BASE_URL,
 });
 
-userApi.interceptors.request.use((config) => {
+// Proactively refresh the access token if missing but a refresh token exists
+userApi.interceptors.request.use(async (config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('userToken');
+    let token = localStorage.getItem('customerToken');
+
+    if (!token) {
+      const refresh = localStorage.getItem('customerRefresh');
+      if (refresh) {
+        try {
+          const { data } = await axios.post(`${BASE_URL}/api/auth/refresh/`, { refresh });
+          token = data.access;
+          localStorage.setItem('customerToken', data.access);
+          document.cookie = `customerToken=${data.access}; path=/`;
+        } catch {
+          // Refresh failed — proceed without token, will 401 below
+        }
+      }
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -23,22 +39,23 @@ userApi.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       if (typeof window !== 'undefined') {
-        const refresh = localStorage.getItem('userRefresh');
+        const refresh = localStorage.getItem('customerRefresh');
         if (refresh) {
           try {
             const { data } = await axios.post(`${BASE_URL}/api/auth/refresh/`, { refresh });
-            localStorage.setItem('userToken', data.access);
-            document.cookie = `userToken=${data.access}; path=/`;
+            localStorage.setItem('customerToken', data.access);
+            document.cookie = `customerToken=${data.access}; path=/`;
             original.headers.Authorization = `Bearer ${data.access}`;
             return userApi(original);
           } catch {
-            localStorage.removeItem('userToken');
-            localStorage.removeItem('userRefresh');
-            localStorage.removeItem('userInfo');
-            document.cookie = 'userToken=; path=/; max-age=0';
-            window.location.href = '/login';
+            // Refresh also failed — clear everything and send to login
           }
         }
+        localStorage.removeItem('customerToken');
+        localStorage.removeItem('customerRefresh');
+        localStorage.removeItem('customerUser');
+        document.cookie = 'customerToken=; path=/; max-age=0';
+        window.location.href = '/login';
       }
     }
     return Promise.reject(error);

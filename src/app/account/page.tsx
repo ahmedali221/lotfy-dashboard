@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
+import userApi from '@/lib/axios-user';
 
 interface UserInfo {
   id: number;
@@ -18,19 +19,19 @@ export default function AccountPage() {
   const ar = language === 'ar';
 
   useEffect(() => {
-    const stored = localStorage.getItem('userInfo');
-    if (!stored) {
+    userApi.get('/api/auth/me/').then(({ data }) => {
+      localStorage.setItem('customerUser', JSON.stringify(data));
+      setUser(data);
+    }).catch(() => {
       router.push('/login');
-      return;
-    }
-    setUser(JSON.parse(stored));
+    });
   }, [router]);
 
   const handleLogout = () => {
-    localStorage.removeItem('userToken');
-    localStorage.removeItem('userRefresh');
-    localStorage.removeItem('userInfo');
-    document.cookie = 'userToken=; path=/; max-age=0';
+    localStorage.removeItem('customerToken');
+    localStorage.removeItem('customerRefresh');
+    localStorage.removeItem('customerUser');
+    document.cookie = 'customerToken=; path=/; max-age=0';
     router.push('/login');
   };
 

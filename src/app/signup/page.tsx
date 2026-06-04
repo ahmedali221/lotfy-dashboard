@@ -28,10 +28,10 @@ export default function SignupPage() {
     try {
       const { data } = await userApi.post('/api/auth/signup/', form);
 
-      localStorage.setItem('userToken', data.access);
-      localStorage.setItem('userRefresh', data.refresh);
-      localStorage.setItem('userInfo', JSON.stringify(data.user));
-      document.cookie = `userToken=${data.access}; path=/`;
+      localStorage.setItem('customerToken', data.access);
+      localStorage.setItem('customerRefresh', data.refresh);
+      localStorage.setItem('customerUser', JSON.stringify(data.user));
+      document.cookie = `customerToken=${data.access}; path=/`;
 
       router.push('/account');
     } catch (err: unknown) {
