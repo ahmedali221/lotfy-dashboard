@@ -122,10 +122,10 @@ export default function OrderDetailPage() {
       setOrder(orderRes.data);
       setEvents(eventsRes.data.results ?? eventsRes.data);
 
-      // For items that have a colour but no image snapshot, fetch the product
-      // from the catalog to resolve the matching colour image URL.
+      // For items missing a snapshotted image, fetch the product from the catalog
+      // to resolve the colour-matched image, or fall back to the product thumbnail.
       const needsLookup: OrderItem[] = (orderRes.data.items as OrderItem[]).filter(
-        item => item.product && item.product_colour_snapshot && !item.product_image_url
+        item => item.product && !item.product_image_url
       );
       if (needsLookup.length > 0) {
         const uniqueIds = [...new Set(needsLookup.map(i => i.product))];
@@ -135,9 +135,14 @@ export default function OrderDetailPage() {
         const map: Record<string, string> = {};
         results.forEach(res => {
           const p = res.data;
-          (p.images as { colour: string; image: string }[]).forEach(img => {
+          const imgs = p.images as { colour: string; image: string; sort_order: number }[];
+          // Store per-colour entries
+          imgs.forEach(img => {
             if (img.colour) map[`${p.id}_${img.colour}`] = img.image;
           });
+          // Store the thumbnail fallback (first image by sort_order)
+          const thumb = [...imgs].sort((a, b) => a.sort_order - b.sort_order)[0];
+          if (thumb) map[`${p.id}`] = thumb.image;
         });
         setColourImageMap(map);
       }
@@ -343,8 +348,11 @@ export default function OrderDetailPage() {
                             {(() => {
                               const imgUrl = item.product_image_url
                                 ? resolveMedia(item.product_image_url)
-                                : item.product && item.product_colour_snapshot
-                                  ? colourImageMap[`${item.product}_${item.product_colour_snapshot}`] ?? null
+                                : item.product
+                                  ? (item.product_colour_snapshot
+                                      ? colourImageMap[`${item.product}_${item.product_colour_snapshot}`]
+                                      : colourImageMap[`${item.product}`]
+                                    ) ?? null
                                   : null;
                               return imgUrl || item.product_colour_snapshot ? (
                                 <div className="flex items-center gap-2">
