@@ -26,20 +26,12 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      await userApi.post('/api/auth/signup/', form);
+      const { data } = await userApi.post('/api/auth/signup/', form);
 
-      // Auto-login after signup
-      const { data: tokens } = await userApi.post('/api/auth/login/', {
-        email: form.email,
-        password: form.password,
-      });
-
-      localStorage.setItem('userToken', tokens.access);
-      localStorage.setItem('userRefresh', tokens.refresh);
-
-      const { data: user } = await userApi.get('/api/auth/me/');
-      localStorage.setItem('userInfo', JSON.stringify(user));
-      document.cookie = `userToken=${tokens.access}; path=/`;
+      localStorage.setItem('userToken', data.access);
+      localStorage.setItem('userRefresh', data.refresh);
+      localStorage.setItem('userInfo', JSON.stringify(data.user));
+      document.cookie = `userToken=${data.access}; path=/`;
 
       router.push('/account');
     } catch (err: unknown) {

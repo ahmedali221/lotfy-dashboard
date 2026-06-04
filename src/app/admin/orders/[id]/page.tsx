@@ -18,6 +18,8 @@ interface OrderItem {
   product: number | null;
   product_name_snapshot: string;
   product_category_snapshot: string;
+  product_colour_snapshot: string;
+  product_image_url: string | null;
   quantity: number;
   unit_price_snapshot: string;
   line_total: string;
@@ -293,6 +295,7 @@ export default function OrderDetailPage() {
                       <tr>
                         {[
                           { ar: 'المنتج',      en: 'Product'    },
+                          { ar: 'اللون',       en: 'Color'      },
                           { ar: 'التصنيف',    en: 'Category'   },
                           { ar: 'الكمية',     en: 'Qty'        },
                           { ar: 'سعر الوحدة', en: 'Unit Price' },
@@ -309,6 +312,24 @@ export default function OrderDetailPage() {
                       {order.items.map(item => (
                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 font-medium text-secondary">{item.product_name_snapshot}</td>
+                          <td className="px-4 py-3">
+                            {item.product_image_url || item.product_colour_snapshot ? (
+                              <div className="flex items-center gap-2">
+                                {item.product_image_url && (
+                                  <img
+                                    src={item.product_image_url}
+                                    alt={item.product_colour_snapshot || 'product'}
+                                    className="w-10 h-10 rounded-lg object-cover border border-border flex-shrink-0"
+                                  />
+                                )}
+                                {item.product_colour_snapshot && (
+                                  <span className="text-xs text-secondary">{item.product_colour_snapshot}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-muted-foreground text-xs">{item.product_category_snapshot}</td>
                           <td className="px-4 py-3 text-secondary">{item.quantity}</td>
                           <td className="px-4 py-3 text-secondary whitespace-nowrap">

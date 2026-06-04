@@ -17,6 +17,8 @@ interface OrderItem {
   product: number | null;
   product_name_snapshot: string;
   product_category_snapshot: string;
+  product_colour_snapshot: string;
+  product_image_url: string | null;
   quantity: number;
   unit_price_snapshot: string;
   line_total: string;
