@@ -109,6 +109,9 @@ export default function OrderDetailPage() {
   const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
   const [deletingItem, setDeletingItem] = useState(false);
 
+  // Map of "productId_colour" → image URL for items missing product_image_url
+  const [colourImageMap, setColourImageMap] = useState<Record<string, string>>({});
+
   const fetchOrder = useCallback(async () => {
     setError('');
     try {
@@ -118,6 +121,26 @@ export default function OrderDetailPage() {
       ]);
       setOrder(orderRes.data);
       setEvents(eventsRes.data.results ?? eventsRes.data);
+
+      // For items that have a colour but no image snapshot, fetch the product
+      // from the catalog to resolve the matching colour image URL.
+      const needsLookup: OrderItem[] = (orderRes.data.items as OrderItem[]).filter(
+        item => item.product && item.product_colour_snapshot && !item.product_image_url
+      );
+      if (needsLookup.length > 0) {
+        const uniqueIds = [...new Set(needsLookup.map(i => i.product))];
+        const results = await Promise.all(
+          uniqueIds.map(id => api.get(`/api/catalog/products/${id}/`))
+        );
+        const map: Record<string, string> = {};
+        results.forEach(res => {
+          const p = res.data;
+          (p.images as { colour: string; image: string }[]).forEach(img => {
+            if (img.colour) map[`${p.id}_${img.colour}`] = img.image;
+          });
+        });
+        setColourImageMap(map);
+      }
     } catch {
       setError(t('فشل تحميل الطلب', 'Failed to load order'));
     } finally {
@@ -317,22 +340,29 @@ export default function OrderDetailPage() {
                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 font-medium text-secondary">{item.product_name_snapshot}</td>
                           <td className="px-4 py-3">
-                            {item.product_image_url || item.product_colour_snapshot ? (
-                              <div className="flex items-center gap-2">
-                                {item.product_image_url && (
-                                  <img
-                                    src={resolveMedia(item.product_image_url)!}
-                                    alt={item.product_colour_snapshot || 'product'}
-                                    className="w-10 h-10 rounded-lg object-cover border border-border flex-shrink-0"
-                                  />
-                                )}
-                                {item.product_colour_snapshot && (
-                                  <span className="text-xs text-secondary">{item.product_colour_snapshot}</span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
+                            {(() => {
+                              const imgUrl = item.product_image_url
+                                ? resolveMedia(item.product_image_url)
+                                : item.product && item.product_colour_snapshot
+                                  ? colourImageMap[`${item.product}_${item.product_colour_snapshot}`] ?? null
+                                  : null;
+                              return imgUrl || item.product_colour_snapshot ? (
+                                <div className="flex items-center gap-2">
+                                  {imgUrl && (
+                                    <img
+                                      src={imgUrl}
+                                      alt={item.product_colour_snapshot || 'product'}
+                                      className="w-10 h-10 rounded-lg object-cover border border-border flex-shrink-0"
+                                    />
+                                  )}
+                                  {item.product_colour_snapshot && (
+                                    <span className="text-xs text-secondary">{item.product_colour_snapshot}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-muted-foreground text-xs">{item.product_category_snapshot}</td>
                           <td className="px-4 py-3 text-secondary">{item.quantity}</td>
