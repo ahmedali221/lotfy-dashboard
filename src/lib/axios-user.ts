@@ -6,12 +6,21 @@ const userApi = axios.create({
   baseURL: BASE_URL,
 });
 
-// Proactively refresh the access token if missing but a refresh token exists
+const isTokenExpired = (token: string) => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp < Date.now() / 1000;
+  } catch {
+    return true;
+  }
+};
+
+// Proactively refresh the access token if missing or expired
 userApi.interceptors.request.use(async (config) => {
   if (typeof window !== 'undefined') {
     let token = localStorage.getItem('customerToken');
 
-    if (!token) {
+    if (!token || isTokenExpired(token)) {
       const refresh = localStorage.getItem('customerRefresh');
       if (refresh) {
         try {
@@ -20,7 +29,12 @@ userApi.interceptors.request.use(async (config) => {
           localStorage.setItem('customerToken', data.access);
           document.cookie = `customerToken=${data.access}; path=/`;
         } catch {
-          // Refresh failed — proceed without token, will 401 below
+          localStorage.removeItem('customerToken');
+          localStorage.removeItem('customerRefresh');
+          localStorage.removeItem('customerUser');
+          document.cookie = 'customerToken=; path=/; max-age=0';
+          window.location.href = '/login';
+          return Promise.reject(new Error('Session expired'));
         }
       }
     }
