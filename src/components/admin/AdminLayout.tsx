@@ -18,6 +18,8 @@ import {
   Settings,
   Newspaper,
   Users,
+  Layers,
+  ClipboardList,
 } from 'lucide-react';
 
 const baseNavItems = [
@@ -27,7 +29,9 @@ const baseNavItems = [
   { href: '/admin/articles',       icon: Newspaper,       ar: 'المقالات',    en: 'Articles'         },
   { href: '/admin/orders',         icon: ShoppingCart,    ar: 'الطلبات',     en: 'Orders'           },
   { href: '/admin/payment-methods',icon: CreditCard,      ar: 'طرق الدفع',   en: 'Payment Methods'  },
-  { href: '/admin/delivery-fees',  icon: Truck,           ar: 'رسوم التوصيل',en: 'Delivery Fees'    },
+  { href: '/admin/delivery-fees',         icon: Truck,          ar: 'رسوم التوصيل',      en: 'Delivery Fees'       },
+  { href: '/admin/packages',              icon: Layers,         ar: 'الباقات',            en: 'Packages'            },
+  { href: '/admin/packages/seller-requests', icon: ClipboardList, ar: 'طلبات الباقات',   en: 'Package Requests'    },
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -186,6 +190,16 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         <main className="flex-1 p-6">
           {children}
         </main>
+
+        {/* Footer */}
+        <footer className="py-3 px-6 border-t border-border bg-white text-center flex-shrink-0">
+          <p className="text-xs text-gray-400">
+            تمت البرمجه بواسطه شركه Nexora للبرمجه و حلول السوفتوير &nbsp;|&nbsp; Developed by Nexora Programming &amp; Software Solutions
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5" dir="ltr">
+            01117744708 &nbsp;|&nbsp; +20 10 02828648
+          </p>
+        </footer>
       </div>
     </div>
   );
