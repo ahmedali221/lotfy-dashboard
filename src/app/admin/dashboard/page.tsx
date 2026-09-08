@@ -7,7 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import api from '@/lib/axios';
 import {
   ShoppingCart, Package, AlertTriangle, Truck,
-  CheckCircle, Clock, XCircle,
+  CheckCircle, Clock, Eye, XCircle,
 } from 'lucide-react';
 
 interface StaffDashboard {
@@ -16,6 +16,10 @@ interface StaffDashboard {
   ready_to_pick_up_orders: number;
   picked_up_orders: number;
   low_stock_products: number;
+}
+
+interface VisitCountResponse {
+  total_visits: number;
 }
 
 type OrderStatus = 'placed' | 'approved' | 'rejected' | 'ready_to_pick_up' | 'picked_up';
@@ -58,6 +62,7 @@ export default function DashboardPage() {
 
   const [dashboard, setDashboard] = useState<StaffDashboard | null>(null);
   const [totalProducts, setTotalProducts] = useState<number | null>(null);
+  const [totalVisits, setTotalVisits] = useState<number | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -65,7 +70,12 @@ export default function DashboardPage() {
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
   useEffect(() => {
-    setLoading(true);
+    api.get<VisitCountResponse>('/api/visits/count/')
+      .then(({ data }) => setTotalVisits(data.total_visits))
+      .catch(() => {
+        // Keep the rest of the dashboard usable if analytics is unavailable.
+      });
+
     Promise.all([
       api.get('/api/orders/staff/dashboard/'),
       api.get('/api/catalog/products/', { params: { page: 1, page_size: 1 } }),
@@ -106,6 +116,12 @@ export default function DashboardPage() {
       icon:   AlertTriangle,
       color:  'bg-red-500',
     },
+    {
+      label:  t('إجمالي زيارات الموقع', 'Total Website Visits'),
+      value:  totalVisits ?? undefined,
+      icon:   Eye,
+      color:  'bg-violet-500',
+    },
   ];
 
   const statusBreakdown = [
@@ -133,9 +149,9 @@ export default function DashboardPage() {
         )}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
           {loading
-            ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+            ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
             : kpiCards.map((card, i) => {
                 const Icon = card.icon;
                 return (
