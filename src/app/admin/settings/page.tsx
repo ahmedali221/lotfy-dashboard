@@ -6,6 +6,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Lock, Eye, EyeOff, Monitor, AlertTriangle, X, Clock } from 'lucide-react';
 import api from '@/lib/axios';
+import { fetchAllPages } from '@/lib/pagination';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface StaffDto {
@@ -164,8 +165,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setStaffLoading(true);
-    api.get<{ results: StaffDto[] } | StaffDto[]>('/api/auth/staff/')
-      .then(({ data }) => setStaff(Array.isArray(data) ? data : (data.results ?? [])))
+    fetchAllPages<StaffDto>('/api/auth/staff/')
+      .then(setStaff)
       .catch(() => {})
       .finally(() => setStaffLoading(false));
   }, []);

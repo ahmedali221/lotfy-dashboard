@@ -5,13 +5,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
+import { fetchAllPages } from '@/lib/pagination';
+import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses } from '@/lib/orderStatus';
 import {
-  ArrowRight, ArrowLeft, Clock, CheckCircle, XCircle,
-  Truck, ShoppingBag, DollarSign, FileText, Package,
+  ArrowRight, ArrowLeft, Clock,
+  DollarSign, FileText, Package,
   User, Calendar, Hash, AlertCircle, Loader2, Pencil, Trash2, ImageIcon,
 } from 'lucide-react';
-
-type OrderStatus = 'placed' | 'approved' | 'rejected' | 'ready_to_pick_up' | 'picked_up';
 
 interface OrderItem {
   id: number;
@@ -50,29 +51,11 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://165.227.137.145:8080
 const resolveMedia = (url: string | null) =>
   url && !url.startsWith('http') ? `${BASE_URL}${url}` : url;
 
-const STATUS_CONFIG: Record<OrderStatus, { ar: string; en: string; color: string; icon: React.ElementType }> = {
-  placed:           { ar: 'قيد الانتظار',   en: 'Placed',           color: 'bg-blue-100 text-blue-700 border-blue-200',     icon: Clock       },
-  approved:         { ar: 'معتمد',           en: 'Approved',         color: 'bg-indigo-100 text-indigo-700 border-indigo-200', icon: CheckCircle },
-  rejected:         { ar: 'مرفوض',          en: 'Rejected',         color: 'bg-red-100 text-red-700 border-red-200',         icon: XCircle     },
-  ready_to_pick_up: { ar: 'جاهز للاستلام', en: 'Ready to Pick Up', color: 'bg-green-100 text-green-700 border-green-200',   icon: Truck       },
-  picked_up:        { ar: 'تم الاستلام',   en: 'Picked Up',        color: 'bg-gray-100 text-gray-600 border-gray-200',      icon: ShoppingBag },
-};
-
-// Which statuses can this order transition to
-const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
-  placed:           ['approved', 'rejected'],
-  approved:         ['ready_to_pick_up'],
-  rejected:         [],
-  ready_to_pick_up: ['picked_up'],
-  picked_up:        [],
-};
-
-const STATUS_TRANSITION_LABELS: Record<OrderStatus, { ar: string; en: string; color: string }> = {
+const STATUS_TRANSITION_LABELS: Partial<Record<OrderStatus, { ar: string; en: string; color: string }>> = {
   approved:         { ar: 'اعتماد الطلب',      en: 'Approve Order',     color: 'bg-indigo-600 hover:bg-indigo-700 text-white' },
   rejected:         { ar: 'رفض الطلب',          en: 'Reject Order',      color: 'bg-red-600 hover:bg-red-700 text-white'       },
   ready_to_pick_up: { ar: 'تعيين جاهز للاستلام', en: 'Mark Ready',       color: 'bg-green-600 hover:bg-green-700 text-white'   },
   picked_up:        { ar: 'تأكيد الاستلام',     en: 'Mark Picked Up',    color: 'bg-gray-600 hover:bg-gray-700 text-white'     },
-  placed:           { ar: '',                    en: '',                   color: ''                                              },
 };
 
 export default function OrderDetailPage() {
@@ -115,12 +98,12 @@ export default function OrderDetailPage() {
   const fetchOrder = useCallback(async () => {
     setError('');
     try {
-      const [orderRes, eventsRes] = await Promise.all([
+      const [orderRes, orderEvents] = await Promise.all([
         api.get(`/api/orders/${orderId}/`),
-        api.get(`/api/orders/${orderId}/events/`),
+        fetchAllPages<OrderEvent>(`/api/orders/${orderId}/events/`),
       ]);
       setOrder(orderRes.data);
-      setEvents(eventsRes.data.results ?? eventsRes.data);
+      setEvents(orderEvents);
 
       // For items missing a snapshotted image, fetch the product from the catalog
       // to resolve the colour-matched image, or fall back to the product thumbnail.
@@ -162,8 +145,7 @@ export default function OrderDetailPage() {
       await api.post(`/api/orders/${orderId}/transition-status/`, { status: newStatus });
       await fetchOrder();
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string; status?: string[] } } };
-      setTransitionError(e.response?.data?.detail || e.response?.data?.status?.[0] || t('فشل تغيير الحالة', 'Failed to change status'));
+      setTransitionError(getApiError(err, language, { ar: 'فشل تغيير الحالة', en: 'Failed to change status' }));
     } finally {
       setTransitioning(false);
     }
@@ -184,10 +166,7 @@ export default function OrderDetailPage() {
       setShowDeposit(false);
       await fetchOrder();
     } catch (err: unknown) {
-      const e = err as { response?: { data?: Record<string, string[]> } };
-      const data = e.response?.data;
-      const msg = data ? Object.values(data).flat()[0] : null;
-      setDepositError(msg || t('فشل التحديث', 'Update failed'));
+      setDepositError(getApiError(err, language, { ar: 'فشل التحديث', en: 'Update failed' }));
     } finally {
       setDepositSaving(false);
     }
@@ -208,10 +187,7 @@ export default function OrderDetailPage() {
       setEditItem(null);
       await fetchOrder();
     } catch (err: unknown) {
-      const e = err as { response?: { data?: Record<string, string[]> } };
-      const data = e.response?.data;
-      const msg = data ? Object.values(data).flat()[0] : null;
-      setEditError(msg || t('فشل التعديل', 'Edit failed'));
+      setEditError(getApiError(err, language, { ar: 'فشل التعديل', en: 'Edit failed' }));
     } finally {
       setEditSaving(false);
     }
@@ -232,7 +208,7 @@ export default function OrderDetailPage() {
   };
 
   const canEditItems = order?.status === 'placed';
-  const nextStatuses = order ? NEXT_STATUSES[order.status] : [];
+  const nextStatuses = order ? getNextOrderStatuses(order.status) : [];
   const total = order ? parseFloat(order.total_price) : 0;
   const deposit = order ? parseFloat(order.deposit_amount) : 0;
   const remaining = total - deposit;
@@ -274,7 +250,7 @@ export default function OrderDetailPage() {
     );
   }
 
-  const statusCfg = STATUS_CONFIG[order.status];
+  const statusCfg = getOrderStatusConfig(order.status);
   const StatusIcon = statusCfg.icon;
 
   return (
@@ -555,7 +531,7 @@ export default function OrderDetailPage() {
                 )}
                 <div className="space-y-2">
                   {nextStatuses.map(s => {
-                    const cfg = STATUS_TRANSITION_LABELS[s];
+                    const cfg = STATUS_TRANSITION_LABELS[s] ?? { ...getOrderStatusConfig(s), color: 'bg-gray-600 hover:bg-gray-700 text-white' };
                     return (
                       <button
                         key={s}
@@ -577,7 +553,9 @@ export default function OrderDetailPage() {
               <div className={`rounded-xl border p-4 text-center text-sm font-medium ${statusCfg.color}`}>
                 {order.status === 'picked_up'
                   ? t('✓ تم إغلاق الطلب بنجاح', '✓ Order completed')
-                  : t('✗ تم رفض الطلب', '✗ Order rejected')}
+                  : order.status === 'rejected'
+                    ? t('✗ تم رفض الطلب', '✗ Order rejected')
+                    : t(statusCfg.ar, statusCfg.en)}
               </div>
             )}
           </div>

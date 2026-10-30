@@ -5,6 +5,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { ClipboardList, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
 
 const PAGE_SIZE = 20;
 
@@ -90,10 +91,7 @@ export default function AdminSellerPackagesPage() {
       setConfirmType(null);
       fetchItems(page);
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, unknown> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? (Object.values(data).flat()[0] as string) : null;
-      setActionError(firstMsg || t('فشلت العملية، حاول مرة أخرى', 'Operation failed, please try again'));
+      setActionError(getApiError(err, language, { ar: 'فشلت العملية، حاول مرة أخرى', en: 'Operation failed, please try again' }));
     } finally {
       setActioning(false);
     }

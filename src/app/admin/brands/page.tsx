@@ -5,6 +5,8 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Trash2, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
+import { fetchAllPages } from '@/lib/pagination';
 
 const PAGE_SIZE = 5;
 
@@ -34,8 +36,7 @@ export default function AdminBrandsPage() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.get('/api/catalog/brands/', { params: { page_size: 100 } });
-      setBrands(data.results ?? data);
+      setBrands(await fetchAllPages<Brand>('/api/catalog/brands/'));
       setPage(1);
     } catch {
       setError(t('فشل تحميل الماركات', 'Failed to load brands'));
@@ -78,10 +79,7 @@ export default function AdminBrandsPage() {
       setModalOpen(false);
       fetchBrands();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setFormError(firstMsg || t('فشل الحفظ، حاول مرة أخرى', 'Failed to save, please try again'));
+      setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
       setSaving(false);
     }

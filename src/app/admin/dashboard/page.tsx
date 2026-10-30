@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/lib/axios';
+import { type OrderStatus, getOrderStatusConfig } from '@/lib/orderStatus';
 import {
   ShoppingCart, Package, AlertTriangle, Truck,
-  CheckCircle, Clock, Eye, XCircle,
+  CheckCircle, Clock, Eye, XCircle, Wallet,
 } from 'lucide-react';
 
 interface StaffDashboard {
@@ -16,13 +17,14 @@ interface StaffDashboard {
   ready_to_pick_up_orders: number;
   picked_up_orders: number;
   low_stock_products: number;
+  // Not returned yet; shown once the backend adds them.
+  deposited_orders?: number;
+  total_products?: number;
 }
 
 interface VisitCountResponse {
   total_visits: number;
 }
-
-type OrderStatus = 'placed' | 'approved' | 'rejected' | 'ready_to_pick_up' | 'picked_up';
 
 interface RecentOrder {
   id: number;
@@ -34,13 +36,6 @@ interface RecentOrder {
   items: unknown[];
 }
 
-const ORDER_STATUS_CONFIG: Record<OrderStatus, { ar: string; en: string; color: string }> = {
-  placed:           { ar: 'قيد الانتظار',   en: 'Placed',           color: 'bg-blue-100 text-blue-700 border-blue-200'   },
-  approved:         { ar: 'معتمد',           en: 'Approved',         color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-  rejected:         { ar: 'مرفوض',          en: 'Rejected',         color: 'bg-red-100 text-red-700 border-red-200'       },
-  ready_to_pick_up: { ar: 'جاهز للاستلام', en: 'Ready to Pick Up', color: 'bg-green-100 text-green-700 border-green-200'  },
-  picked_up:        { ar: 'تم الاستلام',   en: 'Picked Up',        color: 'bg-gray-100 text-gray-600 border-gray-200'    },
-};
 
 function SkeletonCard() {
   return (
@@ -61,7 +56,6 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [dashboard, setDashboard] = useState<StaffDashboard | null>(null);
-  const [totalProducts, setTotalProducts] = useState<number | null>(null);
   const [totalVisits, setTotalVisits] = useState<number | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,12 +72,10 @@ export default function DashboardPage() {
 
     Promise.all([
       api.get('/api/orders/staff/dashboard/'),
-      api.get('/api/catalog/products/', { params: { page: 1, page_size: 1 } }),
-      api.get('/api/orders/', { params: { page: 1, page_size: 5 } }),
+      api.get('/api/orders/', { params: { page_size: 5 } }),
     ])
-      .then(([dashRes, prodRes, ordersRes]) => {
+      .then(([dashRes, ordersRes]) => {
         setDashboard(dashRes.data);
-        setTotalProducts(prodRes.data.count);
         setRecentOrders(ordersRes.data.results);
       })
       .catch(() => setError(t('فشل تحميل البيانات، حاول تحديث الصفحة', 'Failed to load data, try refreshing the page')))
@@ -106,7 +98,7 @@ export default function DashboardPage() {
     },
     {
       label:  t('إجمالي المنتجات', 'Total Products'),
-      value:  totalProducts ?? undefined,
+      value:  dashboard?.total_products,
       icon:   Package,
       color:  'bg-primary',
     },
@@ -127,6 +119,9 @@ export default function DashboardPage() {
   const statusBreakdown = [
     { label: t('قيد الانتظار', 'Placed'),           value: dashboard?.placed_orders,           icon: Clock,        color: 'text-blue-600',   bg: 'bg-blue-50'   },
     { label: t('معتمد', 'Approved'),                 value: dashboard?.approved_orders,          icon: CheckCircle,  color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    ...(dashboard?.deposited_orders !== undefined
+      ? [{ label: t('تم دفع العربون', 'Deposited'),   value: dashboard.deposited_orders,          icon: Wallet,       color: 'text-purple-600', bg: 'bg-purple-50' }]
+      : []),
     { label: t('جاهز للاستلام', 'Ready to Pick Up'), value: dashboard?.ready_to_pick_up_orders,  icon: Truck,        color: 'text-green-600',  bg: 'bg-green-50'  },
     { label: t('تم الاستلام', 'Picked Up'),          value: dashboard?.picked_up_orders,         icon: CheckCircle,  color: 'text-gray-600',   bg: 'bg-gray-50'   },
   ];
@@ -234,7 +229,7 @@ export default function DashboardPage() {
                       </tr>
                     )
                     : recentOrders.map(order => {
-                        const statusCfg = ORDER_STATUS_CONFIG[order.status];
+                        const statusCfg = getOrderStatusConfig(order.status);
                         return (
                           <tr key={order.id} onClick={() => router.push(`/admin/orders/${order.id}`)} className="hover:bg-gray-50 transition-colors cursor-pointer">
                             <td className="px-4 py-3 text-sm font-medium text-secondary">#{order.id}</td>
@@ -246,8 +241,8 @@ export default function DashboardPage() {
                               {parseFloat(order.total_price).toLocaleString()} {t('ج.م', 'EGP')}
                             </td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-1 text-xs font-medium rounded-full border ${statusCfg?.color ?? ''}`}>
-                                {statusCfg ? t(statusCfg.ar, statusCfg.en) : order.status}
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full border ${statusCfg.color}`}>
+                                {t(statusCfg.ar, statusCfg.en)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-secondary">

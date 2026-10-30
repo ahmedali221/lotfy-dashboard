@@ -4,8 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { useRouter } from 'next/navigation';
-import { Search, Plus, Pencil, PowerOff, Trash2, Package, AlertTriangle, ChevronLeft, ChevronRight, LayoutList, LayoutGrid } from 'lucide-react';
+import { Search, Plus, Pencil, PowerOff, Package, AlertTriangle, LayoutList, LayoutGrid } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
+import { useCursorPagination } from '@/lib/pagination';
+import { CursorPager } from '@/components/admin/CursorPager';
 
 interface ApiBrand {
   id: number;
@@ -70,8 +73,9 @@ export default function AdminProductsPage() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   const [products, setProducts] = useState<ApiProduct[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const pager = useCursorPagination();
+  const { fetchPage } = pager;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -81,13 +85,12 @@ export default function AdminProductsPage() {
   const [availableColours, setAvailableColours] = useState<string[]>([]);
 
   const [toggleId, setToggleId] = useState<{ id: number; active: boolean } | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const fetchProducts = useCallback(async (currentPage = page) => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const params: Record<string, string | number> = { page: currentPage, page_size: PAGE_SIZE };
+      const params: Record<string, string | number> = { page_size: PAGE_SIZE };
       if (searchTerm) params.name = searchTerm;
       if (colourFilter) params.colour = colourFilter;
       if (categoryFilter === 'glasses_medical') {
@@ -99,15 +102,13 @@ export default function AdminProductsPage() {
       } else if (categoryFilter !== 'all') {
         params.category = categoryFilter;
       }
-      const { data } = await api.get('/api/catalog/products/', { params });
-      setProducts(data.results);
-      setTotalCount(data.count);
+      setProducts(await fetchPage<ApiProduct>('/api/catalog/products/', params));
     } catch {
       setError(language === 'ar' ? 'فشل تحميل المنتجات' : 'Failed to load products');
     } finally {
       setLoading(false);
     }
-  }, [page, searchTerm, categoryFilter, colourFilter, language]);
+  }, [fetchPage, searchTerm, categoryFilter, colourFilter, language]);
 
   useEffect(() => {
     fetchProducts();
@@ -115,12 +116,9 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     api.get('/api/catalog/products/colours/').then(r => setAvailableColours(r.data)).catch(() => {});
+    // The list no longer returns a total count, so the low-stock total comes from the staff dashboard stats.
+    api.get('/api/orders/staff/dashboard/').then(r => setLowStockCount(r.data.low_stock_products ?? 0)).catch(() => {});
   }, []);
-
-  // Reset to page 1 on filter/search change
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm, categoryFilter, colourFilter]);
 
   const toDisplayCategory = (p: ApiProduct): DisplayCategory => {
     if (p.category === 'glasses') {
@@ -131,27 +129,16 @@ export default function AdminProductsPage() {
 
   const handleToggleActive = async () => {
     if (!toggleId) return;
+    const { id } = toggleId;
+    setToggleId(null);
     try {
-      await api.post(`/api/catalog/products/${toggleId.id}/toggle-active/`);
-    } finally {
-      setToggleId(null);
+      await api.post(`/api/catalog/products/${id}/toggle-active/`);
       fetchProducts();
+    } catch (err) {
+      setError(getApiError(err, language, { ar: 'فشل تغيير حالة المنتج', en: 'Failed to change product status' }));
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    setDeleteId(null);
-    try {
-      await api.delete(`/api/catalog/products/${deleteId}/`);
-      fetchProducts();
-    } catch {
-      setError(language === 'ar' ? 'فشل حذف المنتج، يرجى المحاولة مجدداً' : 'Failed to delete product, please try again');
-    }
-  };
-
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-  const lowStockCount = products.filter(p => p.stock_quantity > 0 && p.stock_quantity <= p.low_stock_threshold).length;
 
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
   const catLabel = (cat: string) => CATEGORY_LABELS[cat]?.[language] || cat;
@@ -175,23 +162,6 @@ export default function AdminProductsPage() {
           </button>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: t('الإجمالي', 'Total'), value: totalCount, color: 'bg-blue-500' },
-            { label: t('نظارات النظر', 'Prescription'), value: products.filter(p => p.category === 'glasses' && p.lens_type !== 'sunglasses').length, color: 'bg-blue-400' },
-            { label: t('نظارات الشمس', 'Sunglasses'), value: products.filter(p => p.category === 'glasses' && p.lens_type === 'sunglasses').length, color: 'bg-yellow-500' },
-            { label: t('مخزون منخفض', 'Low Stock'), value: lowStockCount, color: 'bg-red-500' },
-          ].map((s, i) => (
-            <div key={i} className="bg-card rounded-xl p-4 shadow-sm border border-border flex items-center gap-3">
-              <div className={`w-10 h-10 ${s.color} rounded-lg flex items-center justify-center`}>
-                <span className="text-white text-sm font-bold">{s.value}</span>
-              </div>
-              <p className="text-sm text-muted-foreground">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
         {/* Low stock alert */}
         {lowStockCount > 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center gap-3">
@@ -209,14 +179,14 @@ export default function AdminProductsPage() {
             <input
               type="text"
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={e => { pager.reset(); setSearchTerm(e.target.value); }}
               placeholder={t('البحث باسم المنتج...', 'Search by product name...')}
               className="w-full ps-10 pe-4 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             />
           </div>
           <select
             value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
+            onChange={e => { pager.reset(); setCategoryFilter(e.target.value); }}
             className="w-full md:w-52 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
           >
             {(['all', 'glasses_medical', 'glasses_sunglasses', 'lens', 'artificial_eyes', 'light_filters'] as const).map(c => (
@@ -226,7 +196,7 @@ export default function AdminProductsPage() {
           {availableColours.length > 0 && (
             <select
               value={colourFilter}
-              onChange={e => setColourFilter(e.target.value)}
+              onChange={e => { pager.reset(); setColourFilter(e.target.value); }}
               className="w-full md:w-44 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             >
               <option value="">{t('كل الألوان', 'All Colours')}</option>
@@ -344,9 +314,6 @@ export default function AdminProductsPage() {
                             >
                               <PowerOff className="w-4 h-4" />
                             </button>
-                            <button onClick={() => setDeleteId(p.id)} className="p-1.5 hover:bg-red-50 text-red-500 rounded-lg transition-colors" title={t('حذف', 'Delete')}>
-                              <Trash2 className="w-4 h-4" />
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -355,21 +322,15 @@ export default function AdminProductsPage() {
                 </tbody>
               </table>
             </div>
-            {totalPages > 1 && (
-              <div className="p-4 border-t border-border flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  {t(`${totalCount} منتج — صفحة ${page} من ${totalPages}`, `${totalCount} products — Page ${page} of ${totalPages}`)}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50">
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50">
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
+            <CursorPager
+              className="p-4 border-t border-border"
+              pageNumber={pager.pageNumber}
+              hasNext={pager.hasNext}
+              hasPrevious={pager.hasPrevious}
+              onNext={pager.goNext}
+              onPrevious={pager.goPrevious}
+              disabled={loading}
+            />
           </div>
         )}
 
@@ -437,9 +398,6 @@ export default function AdminProductsPage() {
                         >
                           <PowerOff className={`w-3.5 h-3.5 ${p.is_active ? 'text-orange-500' : 'text-green-600'}`} />
                         </button>
-                        <button onClick={() => setDeleteId(p.id)} className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-red-50 transition-colors" title={t('حذف', 'Delete')}>
-                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                        </button>
                       </div>
                     </div>
 
@@ -459,21 +417,15 @@ export default function AdminProductsPage() {
                 ))}
               </div>
             )}
-            {totalPages > 1 && (
-              <div className="mt-4 flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  {t(`${totalCount} منتج — صفحة ${page} من ${totalPages}`, `${totalCount} products — Page ${page} of ${totalPages}`)}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50">
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50">
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
+            <CursorPager
+              className="mt-4"
+              pageNumber={pager.pageNumber}
+              hasNext={pager.hasNext}
+              hasPrevious={pager.hasPrevious}
+              onNext={pager.goNext}
+              onPrevious={pager.goPrevious}
+              disabled={loading}
+            />
           </div>
         )}
       </div>
@@ -509,37 +461,6 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      {/* Delete Confirm */}
-      {deleteId && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
-            <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Trash2 className="w-7 h-7 text-red-600" />
-            </div>
-            <h3 className="text-lg font-bold text-secondary mb-2">{t('تأكيد الحذف', 'Confirm Delete')}</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              {t(
-                'سيتم حذف المنتج نهائياً ولا يمكن التراجع عن هذا الإجراء.',
-                'This product will be permanently deleted and cannot be undone.'
-              )}
-            </p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="px-5 py-2 border border-border rounded-lg text-sm hover:bg-gray-50 transition-colors"
-              >
-                {t('إلغاء', 'Cancel')}
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                {t('حذف نهائي', 'Delete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </AdminLayout>
   );
 }

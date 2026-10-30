@@ -5,6 +5,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
 
 const PAGE_SIZE = 10;
 
@@ -139,10 +140,7 @@ export default function AdminPackagesPage() {
       setModalOpen(false);
       fetchPackages();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, unknown> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? (Object.values(data).flat()[0] as string) : null;
-      setFormError(firstMsg || t('فشل الحفظ، حاول مرة أخرى', 'Failed to save, please try again'));
+      setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
       setSaving(false);
     }

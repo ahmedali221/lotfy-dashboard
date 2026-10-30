@@ -3,9 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { Search, Plus, Pencil, Trash2, FileText, ChevronLeft, ChevronRight, Upload, XCircle, PlusCircle, GripVertical, Eye } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, FileText, Upload, XCircle, PlusCircle, GripVertical, Eye } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
+import { useCursorPagination } from '@/lib/pagination';
+import { CursorPager } from '@/components/admin/CursorPager';
 
 interface ApiArticleSection {
   id?: number;
@@ -59,8 +62,8 @@ export default function AdminArticlesPage() {
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
   const [articles, setArticles] = useState<ApiArticle[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  const pager = useCursorPagination();
+  const { fetchPage } = pager;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -76,24 +79,21 @@ export default function AdminArticlesPage() {
   const [existingImageUrl, setExistingImageUrl] = useState<string>('');
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchArticles = useCallback(async (currentPage = page) => {
+  const fetchArticles = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const params: Record<string, string | number> = { page: currentPage, page_size: PAGE_SIZE };
+      const params: Record<string, string | number> = { page_size: PAGE_SIZE };
       if (searchTerm) params.search = searchTerm;
-      const { data } = await api.get('/api/articles/', { params });
-      setArticles(data.results ?? data);
-      setTotalCount(data.count ?? (data.results ?? data).length);
+      setArticles(await fetchPage<ApiArticle>('/api/articles/', params));
     } catch {
       setError(t('فشل تحميل المقالات', 'Failed to load articles'));
     } finally {
       setLoading(false);
     }
-  }, [page, searchTerm, language]);
+  }, [fetchPage, searchTerm, language]);
 
   useEffect(() => { fetchArticles(); }, [fetchArticles]);
-  useEffect(() => { setPage(1); }, [searchTerm]);
 
   const openAdd = () => {
     setEditingId(null);
@@ -197,10 +197,7 @@ export default function AdminArticlesPage() {
       setModalOpen(false);
       fetchArticles();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setFormError(firstMsg || t('فشل الحفظ، حاول مرة أخرى', 'Failed to save, please try again'));
+      setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
       setSaving(false);
     }
@@ -216,7 +213,6 @@ export default function AdminArticlesPage() {
     }
   };
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -253,7 +249,7 @@ export default function AdminArticlesPage() {
             <input
               type="text"
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={e => { pager.reset(); setSearchTerm(e.target.value); }}
               placeholder={t('البحث في المقالات...', 'Search articles...')}
               className="w-full ps-10 pe-4 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             />
@@ -351,30 +347,15 @@ export default function AdminArticlesPage() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="px-5 py-4 border-t border-border flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {t(`${totalCount} مقال`, `${totalCount} articles`)}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="p-1.5 rounded-lg border border-border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-sm">{page} / {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="p-1.5 rounded-lg border border-border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
+          <CursorPager
+            className="px-5 py-4 border-t border-border"
+            pageNumber={pager.pageNumber}
+            hasNext={pager.hasNext}
+            hasPrevious={pager.hasPrevious}
+            onNext={pager.goNext}
+            onPrevious={pager.goPrevious}
+            disabled={loading}
+          />
         </div>
       </div>
 

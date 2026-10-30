@@ -7,6 +7,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { ArrowLeft, ArrowRight, Users, Pencil, Trash2, Save, X, Eye, EyeOff } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
 
 interface StaffMember {
   id: number;
@@ -89,10 +90,7 @@ export default function StaffDetailPage() {
       setEditMode(false);
       fetchStaff();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setFormError(firstMsg || t('فشل الحفظ، حاول مرة أخرى', 'Failed to save, please try again'));
+      setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
       setSaving(false);
     }

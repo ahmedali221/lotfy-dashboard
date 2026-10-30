@@ -8,6 +8,8 @@ import {
   ArrowLeft, Upload, XCircle, Star, Plus, ImageIcon, Palette,
 } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
+import { fetchAllPages } from '@/lib/pagination';
 
 interface ApiBrand { id: number; name: string; }
 
@@ -120,8 +122,8 @@ export default function ProductFormPage({ productId }: Props) {
   const extraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.get('/api/catalog/brands/', { params: { page_size: 100 } })
-      .then(({ data }) => setBrands(data.results ?? data))
+    fetchAllPages<ApiBrand>('/api/catalog/brands/')
+      .then(setBrands)
       .catch(() => {});
   }, []);
 
@@ -306,10 +308,7 @@ export default function ProductFormPage({ productId }: Props) {
 
       router.push('/admin/products');
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setFormError(firstMsg || t('فشل الحفظ، حاول مرة أخرى', 'Failed to save, please try again'));
+      setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
       setSaving(false);
     }

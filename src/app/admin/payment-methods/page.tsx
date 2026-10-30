@@ -5,6 +5,8 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Trash2, CreditCard, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
+import { fetchAllPages } from '@/lib/pagination';
 
 const PAGE_SIZE = 8;
 
@@ -39,8 +41,7 @@ export default function AdminPaymentMethodsPage() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.get('/api/orders/payment-methods/', { params: { page_size: 100 } });
-      setMethods(data.results ?? data);
+      setMethods(await fetchAllPages<PaymentMethod>('/api/orders/payment-methods/'));
       setPage(1);
     } catch {
       setError(t('فشل تحميل طرق الدفع', 'Failed to load payment methods'));
@@ -88,10 +89,7 @@ export default function AdminPaymentMethodsPage() {
       setModalOpen(false);
       fetchMethods();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setFormError(firstMsg || t('فشل الحفظ، حاول مرة أخرى', 'Failed to save, please try again'));
+      setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
       setSaving(false);
     }

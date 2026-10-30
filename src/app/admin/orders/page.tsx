@@ -6,11 +6,13 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   Eye, Trash2, DollarSign, ShoppingCart, Truck,
-  CheckCircle, Clock, ChevronLeft, ChevronRight, Settings2, Pencil,
+  CheckCircle, Clock, Settings2, Pencil,
 } from 'lucide-react';
 import api from '@/lib/axios';
-
-type OrderStatus = 'placed' | 'approved' | 'rejected' | 'ready_to_pick_up' | 'picked_up';
+import { getApiError } from '@/lib/apiError';
+import { useCursorPagination } from '@/lib/pagination';
+import { CursorPager } from '@/components/admin/CursorPager';
+import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getOrderStatusConfig, getNextOrderStatuses } from '@/lib/orderStatus';
 
 interface OrderItem {
   id: number;
@@ -44,23 +46,11 @@ interface StaffDashboard {
   low_stock_products: number;
 }
 
-const STATUS_CONFIG: Record<OrderStatus, { ar: string; en: string; color: string }> = {
-  placed:           { ar: 'قيد الانتظار',   en: 'Placed',           color: 'bg-blue-100 text-blue-700 border-blue-200'     },
-  approved:         { ar: 'معتمد',           en: 'Approved',         color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-  rejected:         { ar: 'مرفوض',          en: 'Rejected',         color: 'bg-red-100 text-red-700 border-red-200'         },
-  ready_to_pick_up: { ar: 'جاهز للاستلام', en: 'Ready to Pick Up', color: 'bg-green-100 text-green-700 border-green-200'   },
-  picked_up:        { ar: 'تم الاستلام',   en: 'Picked Up',        color: 'bg-gray-100 text-gray-600 border-gray-200'      },
-};
-
 const PAGE_SIZE = 10;
 
 const STATUS_OPTIONS: Array<{ id: OrderStatus | 'all'; ar: string; en: string }> = [
-  { id: 'all',              ar: 'الكل',            en: 'All'             },
-  { id: 'placed',           ar: 'قيد الانتظار',   en: 'Placed'          },
-  { id: 'approved',         ar: 'معتمد',           en: 'Approved'        },
-  { id: 'rejected',         ar: 'مرفوض',          en: 'Rejected'        },
-  { id: 'ready_to_pick_up', ar: 'جاهز للاستلام', en: 'Ready to Pick Up'},
-  { id: 'picked_up',        ar: 'تم الاستلام',   en: 'Picked Up'       },
+  { id: 'all', ar: 'الكل', en: 'All' },
+  ...ORDER_STATUSES.map(id => ({ id, ar: ORDER_STATUS_CONFIG[id].ar, en: ORDER_STATUS_CONFIG[id].en })),
 ];
 
 export default function AdminOrdersPage() {
@@ -70,8 +60,8 @@ export default function AdminOrdersPage() {
 
   // List state
   const [orders, setOrders] = useState<OrderRead[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  const pager = useCursorPagination();
+  const { fetchPage } = pager;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -129,28 +119,26 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const fetchOrders = useCallback(async (currentPage = page) => {
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const params: Record<string, string | number> = { page: currentPage, page_size: PAGE_SIZE };
+      const params: Record<string, string | number> = { page_size: PAGE_SIZE };
       if (statusFilter !== 'all') params.status = statusFilter;
-      const [ordersRes, dashRes] = await Promise.all([
-        api.get('/api/orders/', { params }),
+      const [ordersPage, dashRes] = await Promise.all([
+        fetchPage<OrderRead>('/api/orders/', params),
         api.get('/api/orders/staff/dashboard/'),
       ]);
-      setOrders(ordersRes.data.results);
-      setTotalCount(ordersRes.data.count);
+      setOrders(ordersPage);
       setDashStats(dashRes.data);
     } catch {
       setError(t('فشل تحميل الطلبات', 'Failed to load orders'));
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, language]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchPage, statusFilter, language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
-  useEffect(() => { setPage(1); }, [statusFilter]);
 
   // Status transition
   const handleStatusTransition = async (orderId: number, newStatus: OrderStatus) => {
@@ -158,10 +146,9 @@ export default function AdminOrdersPage() {
     setTransitionError(null);
     try {
       await api.post(`/api/orders/${orderId}/transition-status/`, { status: newStatus });
-      fetchOrders(page);
+      fetchOrders();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string; status?: string[] } } };
-      const msg = axiosErr.response?.data?.detail || axiosErr.response?.data?.status?.[0] || t('فشل تغيير الحالة', 'Failed to change status');
+      const msg = getApiError(err, language, { ar: 'فشل تغيير الحالة', en: 'Failed to change status' });
       setTransitionError({ id: orderId, msg });
     } finally {
       setTransitioning(null);
@@ -175,7 +162,7 @@ export default function AdminOrdersPage() {
     try {
       await api.delete(`/api/orders/${deleteId}/`);
       setDeleteId(null);
-      fetchOrders(page);
+      fetchOrders();
     } catch {
       setDeleteId(null);
     } finally {
@@ -197,19 +184,15 @@ export default function AdminOrdersPage() {
     try {
       await api.post(`/api/orders/${depositModal.id}/update-deposit/`, { deposit_amount: depositValue });
       setDepositModal(null);
-      fetchOrders(page);
+      fetchOrders();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setDepositError(firstMsg || t('فشل التحديث', 'Failed to update'));
+      setDepositError(getApiError(err, language, { ar: 'فشل التحديث', en: 'Failed to update' }));
     } finally {
       setDepositSaving(false);
     }
   };
 
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const statsCards = [
     { label: t('قيد الانتظار', 'Placed'),           value: dashStats?.placed_orders,           icon: Clock,         bg: 'bg-blue-500'   },
@@ -278,7 +261,7 @@ export default function AdminOrdersPage() {
         <div className="bg-card rounded-xl p-4 shadow-sm border border-border">
           <select
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as OrderStatus | 'all')}
+            onChange={e => { pager.reset(); setStatusFilter(e.target.value as OrderStatus | 'all'); }}
             className="w-full md:w-56 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
           >
             {STATUS_OPTIONS.map(o => (
@@ -334,7 +317,8 @@ export default function AdminOrdersPage() {
                       </tr>
                     )
                     : orders.map(order => {
-                        const statusCfg = STATUS_CONFIG[order.status];
+                        const statusCfg = getOrderStatusConfig(order.status);
+                        const nextStatuses = getNextOrderStatuses(order.status);
                         const isTransitioning = transitioning === order.id;
                         return (
                           <tr key={order.id} className="hover:bg-gray-50 transition-colors">
@@ -353,12 +337,13 @@ export default function AdminOrdersPage() {
                               <div className="space-y-1">
                                 <select
                                   value={order.status}
-                                  disabled={isTransitioning}
+                                  disabled={isTransitioning || nextStatuses.length === 0}
                                   onChange={e => handleStatusTransition(order.id, e.target.value as OrderStatus)}
-                                  className={`px-2 py-1 text-xs font-medium rounded-full border cursor-pointer disabled:opacity-50 ${statusCfg.color}`}
+                                  className={`px-2 py-1 text-xs font-medium rounded-full border cursor-pointer disabled:opacity-50 disabled:cursor-default ${statusCfg.color}`}
                                 >
-                                  {STATUS_OPTIONS.filter(s => s.id !== 'all').map(s => (
-                                    <option key={s.id} value={s.id}>{t(s.ar, s.en)}</option>
+                                  <option value={order.status}>{t(statusCfg.ar, statusCfg.en)}</option>
+                                  {nextStatuses.map(s => (
+                                    <option key={s} value={s}>{t(ORDER_STATUS_CONFIG[s].ar, ORDER_STATUS_CONFIG[s].en)}</option>
                                   ))}
                                 </select>
                                 {transitionError?.id === order.id && (
@@ -402,32 +387,15 @@ export default function AdminOrdersPage() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="p-4 border-t border-border flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {t(
-                  `${totalCount} طلب — صفحة ${page} من ${totalPages}`,
-                  `${totalCount} orders — Page ${page} of ${totalPages}`
-                )}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
+          <CursorPager
+            className="p-4 border-t border-border"
+            pageNumber={pager.pageNumber}
+            hasNext={pager.hasNext}
+            hasPrevious={pager.hasPrevious}
+            onNext={pager.goNext}
+            onPrevious={pager.goPrevious}
+            disabled={loading}
+          />
         </div>
       </div>
 

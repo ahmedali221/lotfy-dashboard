@@ -7,6 +7,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Calendar, Clock, User, FileText, Pencil, Trash2, XCircle, Upload, PlusCircle, GripVertical } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
 
 interface ApiArticleSection {
   id?: number;
@@ -156,10 +157,7 @@ export default function ArticleDetailPage() {
       setEditOpen(false);
       fetchArticle();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      const data = axiosErr.response?.data;
-      const firstMsg = data ? Object.values(data).flat()[0] : null;
-      setFormError(firstMsg || t('فشل الحفظ، حاول مرة أخرى', 'Failed to save, please try again'));
+      setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
       setSaving(false);
     }

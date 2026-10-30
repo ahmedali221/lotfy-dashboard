@@ -7,6 +7,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Trash2, Users, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import api from '@/lib/axios';
+import { fetchAllPages } from '@/lib/pagination';
 
 const PAGE_SIZE = 5;
 
@@ -42,8 +43,7 @@ export default function AdminStaffPage() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.get('/api/auth/staff/', { params: { page_size: 100 } });
-      setStaff(data.results ?? data);
+      setStaff(await fetchAllPages<StaffMember>('/api/auth/staff/'));
       setPage(1);
     } catch {
       setError(t('فشل تحميل الموظفين', 'Failed to load staff'));

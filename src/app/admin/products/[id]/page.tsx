@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import api from '@/lib/axios';
+import { getApiError } from '@/lib/apiError';
 
 interface ProductImage {
   id: number;
@@ -129,6 +130,8 @@ export default function ProductDetailPage() {
     try {
       const { data } = await api.post(`/api/catalog/products/${id}/toggle-active/`);
       setProduct(data);
+    } catch (err) {
+      setError(getApiError(err, language, { ar: 'فشل تغيير حالة المنتج', en: 'Failed to change product status' }));
     } finally {
       setToggling(false);
     }
