@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import {
@@ -11,8 +11,9 @@ import {
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { useCursorPagination } from '@/lib/pagination';
+import { useSyncUrlParams } from '@/lib/useUrlParams';
 import { CursorPager } from '@/components/admin/CursorPager';
-import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getOrderStatusConfig, getNextOrderStatuses } from '@/lib/orderStatus';
+import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit } from '@/lib/orderStatus';
 
 interface OrderItem {
   id: number;
@@ -56,6 +57,7 @@ const STATUS_OPTIONS: Array<{ id: OrderStatus | 'all'; ar: string; en: string }>
 export default function AdminOrdersPage() {
   const { language } = useLanguage();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
   // List state
@@ -69,7 +71,12 @@ export default function AdminOrdersPage() {
   const [dashStats, setDashStats] = useState<StaffDashboard | null>(null);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
+  // Kept in the URL so Back from an order restores it.
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>(() => {
+    const fromUrl = searchParams.get('status') as OrderStatus | null;
+    return fromUrl && ORDER_STATUSES.includes(fromUrl) ? fromUrl : 'all';
+  });
+  useSyncUrlParams({ status: statusFilter === 'all' ? null : statusFilter });
 
   // Status transition
   const [transitioning, setTransitioning] = useState<number | null>(null);
@@ -363,13 +370,15 @@ export default function AdminOrdersPage() {
                                 >
                                   <Eye className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => openDepositModal(order)}
-                                  className="p-1.5 hover:bg-green-50 text-green-600 rounded-lg transition-colors"
-                                  title={t('تعديل العربون', 'Update Deposit')}
-                                >
-                                  <DollarSign className="w-4 h-4" />
-                                </button>
+                                {canUpdateDeposit(order.status) && (
+                                  <button
+                                    onClick={() => openDepositModal(order)}
+                                    className="p-1.5 hover:bg-green-50 text-green-600 rounded-lg transition-colors"
+                                    title={t('تعديل العربون', 'Update Deposit')}
+                                  >
+                                    <DollarSign className="w-4 h-4" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setDeleteId(order.id)}
                                   className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors"

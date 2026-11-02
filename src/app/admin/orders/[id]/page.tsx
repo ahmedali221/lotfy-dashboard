@@ -7,7 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { fetchAllPages } from '@/lib/pagination';
-import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses } from '@/lib/orderStatus';
+import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, canChangePaymentProof, getOrderEventLabel } from '@/lib/orderStatus';
 import {
   ArrowRight, ArrowLeft, Clock,
   DollarSign, FileText, Package,
@@ -75,6 +75,12 @@ export default function OrderDetailPage() {
   // Status transition
   const [transitioning, setTransitioning] = useState(false);
   const [transitionError, setTransitionError] = useState('');
+
+  // Payment proof upload / replacement (staff, while the order is `placed`)
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofDeposit, setProofDeposit] = useState('');
+  const [proofSaving, setProofSaving] = useState(false);
+  const [proofError, setProofError] = useState('');
 
   // Deposit modal
   const [showDeposit, setShowDeposit] = useState(false);
@@ -169,6 +175,31 @@ export default function OrderDetailPage() {
       setDepositError(getApiError(err, language, { ar: 'فشل التحديث', en: 'Update failed' }));
     } finally {
       setDepositSaving(false);
+    }
+  };
+
+  const handleProofUpload = async () => {
+    if (!order || !proofFile) return;
+    setProofSaving(true);
+    setProofError('');
+    try {
+      const formData = new FormData();
+      formData.append('payment_proof', proofFile);
+      if (proofDeposit.trim() !== '') formData.append('deposit_amount', proofDeposit.trim());
+      // POST for the first receipt, PATCH to replace an existing one.
+      await api.request({
+        method: order.payment_proof ? 'patch' : 'post',
+        url: `/api/orders/${orderId}/upload-payment-proof/`,
+        data: formData,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setProofFile(null);
+      setProofDeposit('');
+      await fetchOrder();
+    } catch (err: unknown) {
+      setProofError(getApiError(err, language, { ar: 'فشل رفع الإيصال، لم يتم حفظ أي تغيير', en: 'Upload failed, nothing was saved' }));
+    } finally {
+      setProofSaving(false);
     }
   };
 
@@ -418,6 +449,45 @@ export default function OrderDetailPage() {
                   <p className="text-sm">{t('لم يتم رفع إثبات الدفع بعد', 'No payment proof uploaded yet')}</p>
                 </div>
               )}
+
+              {canChangePaymentProof(order.status) && (
+                <div className="mt-4 pt-4 border-t border-border space-y-3">
+                  <p className="text-sm font-medium text-secondary">
+                    {order.payment_proof ? t('استبدال الإيصال', 'Replace receipt') : t('رفع إيصال', 'Upload receipt')}
+                  </p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => setProofFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-sm text-muted-foreground file:me-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-white file:text-sm"
+                  />
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      {t('مبلغ العربون (اختياري — يُترك فارغاً للإبقاء على المبلغ الحالي)', 'Deposit amount (optional — leave empty to keep the current amount)')}
+                    </label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={proofDeposit}
+                      onChange={e => setProofDeposit(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      dir="ltr"
+                    />
+                  </div>
+                  {proofError && (
+                    <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{proofError}</p>
+                  )}
+                  <button
+                    onClick={handleProofUpload}
+                    disabled={!proofFile || proofSaving}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+                  >
+                    {proofSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {order.payment_proof ? t('استبدال الإيصال', 'Replace receipt') : t('رفع الإيصال', 'Upload receipt')}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Event history */}
@@ -436,7 +506,7 @@ export default function OrderDetailPage() {
                     <div key={ev.id} className="px-6 py-4 flex items-start gap-3">
                       <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-secondary">{ev.event_type.replace(/_/g, ' ')}</p>
+                        <p className="text-sm font-medium text-secondary">{t(getOrderEventLabel(ev.event_type).ar, getOrderEventLabel(ev.event_type).en)}</p>
                         {Object.keys(ev.meta).length > 0 && (
                           <p className="text-xs text-muted-foreground mt-0.5 font-mono">
                             {JSON.stringify(ev.meta)}
@@ -501,7 +571,10 @@ export default function OrderDetailPage() {
                   <span className="font-bold text-secondary">{total.toLocaleString()} {t('ج.م', 'EGP')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('العربون المدفوع', 'Deposit Paid')}</span>
+                  {/* While placed, a deposit is only what the customer claims; staff confirm it on approval. */}
+                  <span className="text-muted-foreground">
+                    {order.status === 'placed' ? t('العربون المُرسَل (لم يُؤكَّد بعد)', 'Submitted deposit (not confirmed yet)') : t('العربون المدفوع', 'Deposit Paid')}
+                  </span>
                   <span className="font-medium text-green-600">{deposit.toLocaleString()} {t('ج.م', 'EGP')}</span>
                 </div>
                 <div className="flex justify-between border-t border-border pt-2 mt-1">
@@ -511,7 +584,7 @@ export default function OrderDetailPage() {
               </div>
 
               {/* Update deposit */}
-              {!['rejected', 'picked_up'].includes(order.status) && (
+              {canUpdateDeposit(order.status) && (
                 <button
                   onClick={openDeposit}
                   className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded-lg text-sm hover:bg-gray-50 transition-colors"

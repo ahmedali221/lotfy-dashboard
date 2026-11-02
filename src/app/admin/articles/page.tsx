@@ -5,9 +5,11 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Search, Plus, Pencil, Trash2, FileText, Upload, XCircle, PlusCircle, GripVertical, Eye } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { useCursorPagination } from '@/lib/pagination';
+import { useSyncUrlParams } from '@/lib/useUrlParams';
 import { CursorPager } from '@/components/admin/CursorPager';
 
 interface ApiArticleSection {
@@ -67,7 +69,10 @@ export default function AdminArticlesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  // Kept in the URL so Back from an article restores it.
+  const searchParams = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') ?? '');
+  useSyncUrlParams({ q: searchTerm });
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);

@@ -44,3 +44,29 @@ export const getOrderStatusConfig = (status: string): OrderStatusConfig =>
 
 export const getNextOrderStatuses = (status: string): OrderStatus[] =>
   NEXT_ORDER_STATUSES[status as OrderStatus] ?? [];
+
+// Backend rules (orders/services.py): staff may edit the deposit only after the
+// order leaves `placed`, and never on rejected or picked-up orders.
+export const canUpdateDeposit = (status: string) =>
+  ['approved', 'deposited', 'ready_to_pick_up'].includes(status);
+
+// The payment proof (and the deposit sent with it) can only change while `placed`.
+export const canChangePaymentProof = (status: string) => status === 'placed';
+
+const ORDER_EVENT_LABELS: Record<string, { ar: string; en: string }> = {
+  order_placed:           { ar: 'تم إنشاء الطلب',        en: 'Order placed'           },
+  order_approved:         { ar: 'تم اعتماد الطلب',       en: 'Order approved'         },
+  order_deposited:        { ar: 'تم تأكيد دفع العربون',  en: 'Deposit confirmed'      },
+  order_rejected:         { ar: 'تم رفض الطلب',          en: 'Order rejected'         },
+  deposit_updated:        { ar: 'تم تعديل العربون',       en: 'Deposit updated'        },
+  payment_proof_uploaded: { ar: 'تم رفع إيصال الدفع',    en: 'Payment proof uploaded' },
+  item_updated:           { ar: 'تم تعديل منتج',          en: 'Item updated'           },
+  item_removed:           { ar: 'تم حذف منتج',            en: 'Item removed'           },
+  price_updated:          { ar: 'تم تعديل السعر',         en: 'Price updated'          },
+  ready_to_pick_up:       { ar: 'جاهز للاستلام',          en: 'Ready to pick up'       },
+  picked_up:              { ar: 'تم الاستلام',            en: 'Picked up'              },
+  status_updated:         { ar: 'تم تغيير الحالة',        en: 'Status updated'         },
+};
+
+export const getOrderEventLabel = (eventType: string) =>
+  ORDER_EVENT_LABELS[eventType] ?? { ar: eventType.replace(/_/g, ' '), en: eventType.replace(/_/g, ' ') };

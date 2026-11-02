@@ -18,8 +18,6 @@ import {
   Settings,
   Newspaper,
   Users,
-  Layers,
-  ClipboardList,
 } from 'lucide-react';
 
 const baseNavItems = [
@@ -30,8 +28,6 @@ const baseNavItems = [
   { href: '/admin/orders',         icon: ShoppingCart,    ar: 'الطلبات',     en: 'Orders'           },
   { href: '/admin/payment-methods',icon: CreditCard,      ar: 'طرق الدفع',   en: 'Payment Methods'  },
   { href: '/admin/delivery-fees',         icon: Truck,          ar: 'رسوم التوصيل',      en: 'Delivery Fees'       },
-  { href: '/admin/packages',              icon: Layers,         ar: 'الباقات',            en: 'Packages'            },
-  { href: '/admin/packages/seller-requests', icon: ClipboardList, ar: 'طلبات الباقات',   en: 'Package Requests'    },
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {

@@ -10,6 +10,7 @@ import {
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { fetchAllPages } from '@/lib/pagination';
+import { applyDiscount, basePriceOf, discountPayload, discountPctOf, isValidDiscountPct } from '@/lib/discount';
 
 interface ApiBrand { id: number; name: string; }
 
@@ -44,8 +45,8 @@ interface ProductForm {
   category: DisplayCategory;
   gender: 'male' | 'female' | 'kids' | 'unisex';
   frame_shape: 'square' | 'rectangle' | 'round' | 'cat_eye' | 'oval' | '';
-  price: string;
-  previous_price: string;
+  base_price: string;
+  discount_pct: string;
   stock_quantity: number | '';
   low_stock_threshold: number | '';
   description: string;
@@ -53,7 +54,7 @@ interface ProductForm {
 
 const EMPTY_FORM: ProductForm = {
   name: '', brand: '', category: 'glasses_medical', gender: 'unisex',
-  frame_shape: '', price: '', previous_price: '', stock_quantity: '',
+  frame_shape: '', base_price: '', discount_pct: '', stock_quantity: '',
   low_stock_threshold: 5, description: '',
 };
 
@@ -143,8 +144,8 @@ export default function ProductFormPage({ productId }: Props) {
           category: displayCat,
           gender: p.gender,
           frame_shape: p.frame_shape ?? '',
-          price: p.price,
-          previous_price: p.previous_price ?? '',
+          base_price: basePriceOf(p).toFixed(2),
+          discount_pct: discountPctOf(p) > 0 ? String(discountPctOf(p)) : '',
           stock_quantity: p.stock_quantity,
           low_stock_threshold: p.low_stock_threshold,
           description: p.description ?? '',
@@ -215,8 +216,12 @@ export default function ProductFormPage({ productId }: Props) {
   // ── Save ────────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.price || form.stock_quantity === '') {
+    if (!form.name.trim() || !form.base_price || form.stock_quantity === '') {
       setFormError(t('يرجى ملء جميع الحقول المطلوبة', 'Please fill all required fields'));
+      return;
+    }
+    if (!isValidDiscountPct(discountPct)) {
+      setFormError(t('نسبة الخصم يجب أن تكون بين 0 و 99', 'Discount must be between 0 and 99'));
       return;
     }
     const hasThumb = thumbExisting || thumbNew;
@@ -239,8 +244,10 @@ export default function ProductFormPage({ productId }: Props) {
       formData.append('category', apiCategory);
       formData.append('gender', form.gender);
       formData.append('frame_shape', isGlasses && form.frame_shape ? form.frame_shape : '');
-      formData.append('price', form.price);
-      if (form.previous_price) formData.append('previous_price', form.previous_price);
+      const pricing = discountPayload(parseFloat(form.base_price), discountPct);
+      formData.append('price', pricing.price);
+      // Empty value clears previous_price on the backend.
+      formData.append('previous_price', pricing.previous_price ?? '');
       formData.append('stock_quantity', String(Number(form.stock_quantity)));
       if (form.low_stock_threshold !== '') formData.append('low_stock_threshold', String(Number(form.low_stock_threshold)));
       formData.append('lens_type', apiLensType);
@@ -313,6 +320,10 @@ export default function ProductFormPage({ productId }: Props) {
       setSaving(false);
     }
   };
+
+  const discountPct = form.discount_pct === '' ? 0 : Number(form.discount_pct);
+  const basePrice = parseFloat(form.base_price);
+  const finalPrice = form.base_price !== '' && isValidDiscountPct(discountPct) ? applyDiscount(basePrice, discountPct) : null;
 
   const thumbSrc = thumbNew?.preview ?? (thumbExisting ? resolveImageUrl(thumbExisting.image) : null);
   const isGlasses = form.category === 'glasses_medical' || form.category === 'glasses_sunglasses';
@@ -663,31 +674,39 @@ export default function ProductFormPage({ productId }: Props) {
             </div>
           )}
 
-          {/* Price + Previous Price */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Base Price + Discount % + Final Price */}
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-secondary mb-1">
-                {t('السعر (ج.م)', 'Price (EGP)')} <span className="text-red-500">*</span>
+                {t('السعر الأساسي (ج.م)', 'Base Price (EGP)')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="number" min="0" step="0.01"
-                value={form.price}
-                onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                value={form.base_price}
+                onChange={e => setForm(f => ({ ...f, base_price: e.target.value }))}
                 className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="0.00"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-secondary mb-1">
-                {t('السعر قبل الخصم (ج.م)', 'Previous Price (EGP)')}
+                {t('نسبة الخصم %', 'Discount %')}
               </label>
               <input
-                type="number" min="0" step="0.01"
-                value={form.previous_price}
-                onChange={e => setForm(f => ({ ...f, previous_price: e.target.value }))}
+                type="number" min="0" max="99" step="0.01"
+                value={form.discount_pct}
+                onChange={e => setForm(f => ({ ...f, discount_pct: e.target.value }))}
                 className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="0.00"
+                placeholder="0"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-secondary mb-1">
+                {t('السعر بعد الخصم (ج.م)', 'Final Price (EGP)')}
+              </label>
+              <div className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-gray-50 font-semibold text-primary">
+                {finalPrice !== null ? parseFloat(finalPrice).toLocaleString() : '—'}
+              </div>
             </div>
           </div>
 

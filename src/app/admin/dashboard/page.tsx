@@ -17,13 +17,11 @@ interface StaffDashboard {
   ready_to_pick_up_orders: number;
   picked_up_orders: number;
   low_stock_products: number;
-  // Not returned yet; shown once the backend adds them.
   deposited_orders?: number;
+  // The backend does not return these yet (no visits-count endpoint exists);
+  // their cards appear automatically once it does.
   total_products?: number;
-}
-
-interface VisitCountResponse {
-  total_visits: number;
+  total_visits?: number;
 }
 
 interface RecentOrder {
@@ -56,7 +54,6 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [dashboard, setDashboard] = useState<StaffDashboard | null>(null);
-  const [totalVisits, setTotalVisits] = useState<number | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,11 +61,6 @@ export default function DashboardPage() {
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
   useEffect(() => {
-    api.get<VisitCountResponse>('/api/visits/count/')
-      .then(({ data }) => setTotalVisits(data.total_visits))
-      .catch(() => {
-        // Keep the rest of the dashboard usable if analytics is unavailable.
-      });
 
     Promise.all([
       api.get('/api/orders/staff/dashboard/'),
@@ -101,6 +93,7 @@ export default function DashboardPage() {
       value:  dashboard?.total_products,
       icon:   Package,
       color:  'bg-primary',
+      optional: true,
     },
     {
       label:  t('مخزون منخفض', 'Low Stock Products'),
@@ -110,11 +103,14 @@ export default function DashboardPage() {
     },
     {
       label:  t('إجمالي زيارات الموقع', 'Total Website Visits'),
-      value:  totalVisits ?? undefined,
+      value:  dashboard?.total_visits,
       icon:   Eye,
       color:  'bg-violet-500',
+      optional: true,
     },
-  ];
+  ].filter(card => !card.optional || card.value !== undefined);
+
+  const KPI_GRID_COLS: Record<number, string> = { 3: 'lg:grid-cols-3', 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5' };
 
   const statusBreakdown = [
     { label: t('قيد الانتظار', 'Placed'),           value: dashboard?.placed_orders,           icon: Clock,        color: 'text-blue-600',   bg: 'bg-blue-50'   },
@@ -144,9 +140,9 @@ export default function DashboardPage() {
         )}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${KPI_GRID_COLS[kpiCards.length] ?? 'lg:grid-cols-5'} gap-6`}>
           {loading
-            ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
+            ? Array.from({ length: kpiCards.length }).map((_, i) => <SkeletonCard key={i} />)
             : kpiCards.map((card, i) => {
                 const Icon = card.icon;
                 return (

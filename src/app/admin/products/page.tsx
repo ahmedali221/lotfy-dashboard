@@ -3,12 +3,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { useRouter } from 'next/navigation';
-import { Search, Plus, Pencil, PowerOff, Package, AlertTriangle, LayoutList, LayoutGrid } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Search, Plus, Pencil, PowerOff, Package, AlertTriangle, LayoutList, LayoutGrid, Percent } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { useCursorPagination } from '@/lib/pagination';
+import { useSyncUrlParams } from '@/lib/useUrlParams';
+import { discountPctOf } from '@/lib/discount';
 import { CursorPager } from '@/components/admin/CursorPager';
+import { BulkDiscountModal } from './_components/BulkDiscountModal';
 
 interface ApiBrand {
   id: number;
@@ -70,7 +73,8 @@ function resolveImageUrl(url: string): string {
 export default function AdminProductsPage() {
   const { language } = useLanguage();
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const searchParams = useSearchParams();
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => searchParams.get('view') === 'grid' ? 'grid' : 'list');
 
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [lowStockCount, setLowStockCount] = useState(0);
@@ -79,12 +83,20 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [colourFilter, setColourFilter] = useState('');
+  // Filters live in the URL so Back from a product restores them.
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') ?? '');
+  const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get('category') ?? 'all');
+  const [colourFilter, setColourFilter] = useState(() => searchParams.get('colour') ?? '');
+  useSyncUrlParams({
+    q: searchTerm,
+    category: categoryFilter === 'all' ? null : categoryFilter,
+    colour: colourFilter,
+    view: viewMode === 'grid' ? 'grid' : null,
+  });
   const [availableColours, setAvailableColours] = useState<string[]>([]);
 
   const [toggleId, setToggleId] = useState<{ id: number; active: boolean } | null>(null);
+  const [showDiscount, setShowDiscount] = useState(false);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -153,6 +165,14 @@ export default function AdminProductsPage() {
             <h1 className="text-3xl font-bold text-secondary mb-1">{t('إدارة المنتجات', 'Products Management')}</h1>
             <p className="text-muted-foreground text-sm">{t('إدارة جميع المنتجات', 'Manage all products')}</p>
           </div>
+          <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowDiscount(true)}
+            className="flex items-center gap-2 border border-primary text-primary hover:bg-primary/10 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Percent className="w-4 h-4" />
+            {t('خصم', 'Discount')}
+          </button>
           <button
             onClick={() => router.push('/admin/products/new')}
             className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-md"
@@ -160,6 +180,7 @@ export default function AdminProductsPage() {
             <Plus className="w-4 h-4" />
             {t('منتج جديد', 'New Product')}
           </button>
+          </div>
         </div>
 
         {/* Low stock alert */}
@@ -290,6 +311,12 @@ export default function AdminProductsPage() {
                         <td className="px-5 py-4 text-sm text-secondary">{GENDER_LABELS[p.gender]?.[language] ?? p.gender}</td>
                         <td className="px-5 py-4 text-sm font-medium text-secondary">
                           {parseFloat(p.price).toLocaleString()} {t('ج.م', 'EGP')}
+                          {discountPctOf(p) > 0 && (
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              <span className="line-through">{parseFloat(p.previous_price!).toLocaleString()}</span>
+                              <span dir="ltr" className="mx-1 text-red-600">-{discountPctOf(p)}%</span>
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-4">
                           <span className={`text-sm font-medium ${p.stock_quantity <= p.low_stock_threshold ? 'text-red-600' : 'text-secondary'}`}>
@@ -429,6 +456,15 @@ export default function AdminProductsPage() {
           </div>
         )}
       </div>
+
+      {showDiscount && (
+        <BulkDiscountModal
+          language={language}
+          categoryLabels={CATEGORY_LABELS}
+          onClose={() => setShowDiscount(false)}
+          onApplied={fetchProducts}
+        />
+      )}
 
       {/* Toggle Active Confirm */}
       {toggleId && (

@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import api from '@/lib/axios';
+import { useSyncUrlParams } from '@/lib/useUrlParams';
 
 export interface CursorPage<T> {
   next: string | null;
@@ -31,9 +33,17 @@ export async function fetchAllPages<T>(url: string, params: Record<string, unkno
 // Previous/next navigation over a cursor-paginated endpoint.
 // `cursor` is null on the first page; call `reset()` when filters, search or
 // ordering change so the list starts over from the first page.
+// The cursor and page number live in the URL so Back returns to the same page.
 export function useCursorPagination() {
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [pageNumber, setPageNumber] = useState(1);
+  const searchParams = useSearchParams();
+  // toApiPath drops any host, so a crafted ?cursor= link cannot send the auth header elsewhere.
+  const [cursor, setCursor] = useState<string | null>(() => {
+    const fromUrl = searchParams.get('cursor');
+    return fromUrl ? toApiPath(fromUrl) : null;
+  });
+  const [pageNumber, setPageNumber] = useState(() => Number(searchParams.get('page')) || 1);
+
+  useSyncUrlParams({ cursor, page: pageNumber > 1 ? String(pageNumber) : null });
   const [links, setLinks] = useState<{ next: string | null; previous: string | null }>({ next: null, previous: null });
 
   const reset = useCallback(() => {
