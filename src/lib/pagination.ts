@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api from '@/lib/axios';
 import { useSyncUrlParams } from '@/lib/useUrlParams';
+import { scrollAdminToTop } from '@/lib/listScroll';
 
 export interface CursorPage<T> {
   next: string | null;
@@ -55,12 +56,14 @@ export function useCursorPagination() {
     if (!links.next) return;
     setCursor(toApiPath(links.next));
     setPageNumber(n => n + 1);
+    scrollAdminToTop();
   };
 
   const goPrevious = () => {
     if (!links.previous) return;
     setCursor(toApiPath(links.previous));
     setPageNumber(n => Math.max(1, n - 1));
+    scrollAdminToTop();
   };
 
   // Fetch the current page: the stored cursor URL already carries the filters.

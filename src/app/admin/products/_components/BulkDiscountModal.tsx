@@ -14,6 +14,7 @@ interface DiscountProduct {
   price: string;
   previous_price: string | null;
   is_active: boolean;
+  images: { id: number; image: string; sort_order: number }[];
 }
 
 interface Props {
@@ -24,6 +25,15 @@ interface Props {
 }
 
 const BATCH_SIZE = 5;
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+
+const firstImageOf = (p: DiscountProduct) => {
+  const url = [...(p.images ?? [])].sort((a, b) => a.sort_order - b.sort_order)[0]?.image;
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 const displayCategory = (p: DiscountProduct) =>
   p.category === 'glasses' ? (p.lens_type === 'sunglasses' ? 'glasses_sunglasses' : 'glasses_medical') : p.category;
@@ -195,6 +205,13 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-gray-50 ${!p.is_active ? 'opacity-60' : ''}`}
                 >
                   <input type="checkbox" checked={checked} onChange={() => toggle(p.id)} className="w-4 h-4 accent-primary" />
+                  <div className="w-20 h-20 shrink-0 rounded-lg border border-border bg-gray-50 overflow-hidden flex items-center justify-center">
+                    {firstImageOf(p) ? (
+                      <img src={firstImageOf(p)!} alt={p.name} loading="lazy" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">{t('بدون صورة', 'No image')}</span>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-secondary truncate">{p.name}</p>
                     <p className="text-xs text-muted-foreground">

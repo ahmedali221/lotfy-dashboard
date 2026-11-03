@@ -9,6 +9,7 @@ import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { useCursorPagination } from '@/lib/pagination';
 import { useSyncUrlParams } from '@/lib/useUrlParams';
+import { rememberListPosition, useRestoreListScroll } from '@/lib/listScroll';
 import { discountPctOf } from '@/lib/discount';
 import { CursorPager } from '@/components/admin/CursorPager';
 import { BulkDiscountModal } from './_components/BulkDiscountModal';
@@ -102,7 +103,8 @@ export default function AdminProductsPage() {
     setLoading(true);
     setError('');
     try {
-      const params: Record<string, string | number> = { page_size: PAGE_SIZE };
+      // Newest first by default (ids follow creation order).
+      const params: Record<string, string | number> = { page_size: PAGE_SIZE, ordering: '-id' };
       if (searchTerm) params.name = searchTerm;
       if (colourFilter) params.colour = colourFilter;
       if (categoryFilter === 'glasses_medical') {
@@ -131,6 +133,13 @@ export default function AdminProductsPage() {
     // The list no longer returns a total count, so the low-stock total comes from the staff dashboard stats.
     api.get('/api/orders/staff/dashboard/').then(r => setLowStockCount(r.data.low_stock_products ?? 0)).catch(() => {});
   }, []);
+
+  useRestoreListScroll(!loading);
+
+  const openProduct = (href: string) => {
+    rememberListPosition();
+    router.push(href);
+  };
 
   const toDisplayCategory = (p: ApiProduct): DisplayCategory => {
     if (p.category === 'glasses') {
@@ -174,7 +183,7 @@ export default function AdminProductsPage() {
             {t('خصم', 'Discount')}
           </button>
           <button
-            onClick={() => router.push('/admin/products/new')}
+            onClick={() => openProduct('/admin/products/new')}
             className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-md"
           >
             <Plus className="w-4 h-4" />
@@ -290,7 +299,7 @@ export default function AdminProductsPage() {
                     products.map(p => (
                       <tr
                         key={p.id}
-                        onClick={() => router.push(`/admin/products/${p.id}`)}
+                        onClick={() => openProduct(`/admin/products/${p.id}`)}
                         className={`hover:bg-gray-50 transition-colors cursor-pointer ${!p.is_active ? 'opacity-50' : ''}`}
                       >
                         <td className="px-5 py-4">
@@ -331,7 +340,7 @@ export default function AdminProductsPage() {
                         </td>
                         <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => router.push(`/admin/products/${p.id}/edit`)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors" title={t('تعديل', 'Edit')}>
+                            <button onClick={() => openProduct(`/admin/products/${p.id}/edit`)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors" title={t('تعديل', 'Edit')}>
                               <Pencil className="w-4 h-4" />
                             </button>
                             <button
@@ -384,7 +393,7 @@ export default function AdminProductsPage() {
                 {products.map(p => (
                   <div
                     key={p.id}
-                    onClick={() => router.push(`/admin/products/${p.id}`)}
+                    onClick={() => openProduct(`/admin/products/${p.id}`)}
                     className={`bg-card rounded-2xl border border-border overflow-hidden cursor-pointer group transition-all hover:shadow-lg hover:-translate-y-0.5 ${!p.is_active ? 'opacity-60' : ''}`}
                   >
                     {/* Image */}
@@ -415,7 +424,7 @@ export default function AdminProductsPage() {
                         onClick={e => e.stopPropagation()}
                         className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-200 flex justify-end gap-2"
                       >
-                        <button onClick={() => router.push(`/admin/products/${p.id}/edit`)} className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-blue-50 transition-colors" title={t('تعديل', 'Edit')}>
+                        <button onClick={() => openProduct(`/admin/products/${p.id}/edit`)} className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-blue-50 transition-colors" title={t('تعديل', 'Edit')}>
                           <Pencil className="w-3.5 h-3.5 text-blue-600" />
                         </button>
                         <button

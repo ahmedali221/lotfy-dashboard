@@ -11,6 +11,7 @@ import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { fetchAllPages } from '@/lib/pagination';
 import { applyDiscount, basePriceOf, discountPayload, discountPctOf, isValidDiscountPct } from '@/lib/discount';
+import { listReturnUrl } from '@/lib/listScroll';
 
 interface ApiBrand { id: number; name: string; }
 
@@ -313,7 +314,7 @@ export default function ProductFormPage({ productId }: Props) {
         });
       }
 
-      router.push('/admin/products');
+      router.push(listReturnUrl('/admin/products'));
     } catch (err: unknown) {
       setFormError(getApiError(err, language, { ar: 'فشل الحفظ، حاول مرة أخرى', en: 'Failed to save, please try again' }));
     } finally {
@@ -348,7 +349,7 @@ export default function ProductFormPage({ productId }: Props) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push('/admin/products')}
+              onClick={() => router.push(listReturnUrl('/admin/products'))}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-muted-foreground"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -364,7 +365,7 @@ export default function ProductFormPage({ productId }: Props) {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push('/admin/products')}
+              onClick={() => router.push(listReturnUrl('/admin/products'))}
               className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-100 transition-colors"
             >
               {t('إلغاء', 'Cancel')}
@@ -754,7 +755,7 @@ export default function ProductFormPage({ productId }: Props) {
         {/* Bottom Save Bar */}
         <div className="sticky bottom-0 bg-white border-t border-border rounded-b-2xl px-6 py-4 flex justify-end gap-3 shadow-lg">
           <button
-            onClick={() => router.push('/admin/products')}
+            onClick={() => router.push(listReturnUrl('/admin/products'))}
             className="px-5 py-2 border border-border rounded-lg text-sm hover:bg-gray-100 transition-colors"
           >
             {t('إلغاء', 'Cancel')}

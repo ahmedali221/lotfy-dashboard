@@ -4,6 +4,7 @@ import { useState, useEffect, ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
+import { ADMIN_SCROLL_ID } from '@/lib/listScroll';
 import {
   LayoutDashboard,
   Package,
@@ -156,7 +157,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       )}
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+      <div id={ADMIN_SCROLL_ID} className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         {/* Topbar */}
         <header className="bg-white border-b border-border px-6 py-4 flex items-center justify-between sticky top-0 z-40 shadow-sm">
           <button

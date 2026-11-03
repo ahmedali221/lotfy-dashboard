@@ -7,6 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { fetchAllPages } from '@/lib/pagination';
+import { orderTotals } from '@/lib/orderTotals';
 import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, canChangePaymentProof, getOrderEventLabel } from '@/lib/orderStatus';
 import {
   ArrowRight, ArrowLeft, Clock,
@@ -39,6 +40,8 @@ interface OrderDetail {
   customer: number;
   status: OrderStatus;
   total_price: string;
+  delivery_fee?: string;
+  governorate?: string;
   deposit_amount: string;
   notes: string;
   payment_proof: string | null;
@@ -240,9 +243,9 @@ export default function OrderDetailPage() {
 
   const canEditItems = order?.status === 'placed';
   const nextStatuses = order ? getNextOrderStatuses(order.status) : [];
-  const total = order ? parseFloat(order.total_price) : 0;
-  const deposit = order ? parseFloat(order.deposit_amount) : 0;
-  const remaining = total - deposit;
+  const { itemsTotal, deliveryFee, total, deposit, remaining } = order
+    ? orderTotals(order)
+    : { itemsTotal: 0, deliveryFee: 0, total: 0, deposit: 0, remaining: 0 };
 
   // ── Skeleton ──
   if (loading) {
@@ -567,6 +570,14 @@ export default function OrderDetailPage() {
               <h2 className="font-semibold text-secondary">{t('الملخص المالي', 'Financial Summary')}</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('المنتجات', 'Items')}</span>
+                  <span className="font-medium text-secondary">{itemsTotal.toLocaleString()} {t('ج.م', 'EGP')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('رسوم التوصيل', 'Delivery Fee')}</span>
+                  <span className="font-medium text-secondary">{deliveryFee.toLocaleString()} {t('ج.م', 'EGP')}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('إجمالي الطلب', 'Order Total')}</span>
                   <span className="font-bold text-secondary">{total.toLocaleString()} {t('ج.م', 'EGP')}</span>
                 </div>
@@ -577,6 +588,9 @@ export default function OrderDetailPage() {
                   </span>
                   <span className="font-medium text-green-600">{deposit.toLocaleString()} {t('ج.م', 'EGP')}</span>
                 </div>
+                {order.status === 'placed' && deposit > 0 && (
+                  <p className="text-xs text-amber-600">{t('سيُخصم العربون من الإجمالي بعد اعتماد الطلب', 'The deposit is deducted from the total once the order is approved')}</p>
+                )}
                 <div className="flex justify-between border-t border-border pt-2 mt-1">
                   <span className="font-semibold text-secondary">{t('المتبقي', 'Remaining')}</span>
                   <span className="font-bold text-primary text-base">{remaining.toLocaleString()} {t('ج.م', 'EGP')}</span>

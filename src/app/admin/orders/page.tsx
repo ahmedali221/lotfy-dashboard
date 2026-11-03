@@ -11,8 +11,10 @@ import {
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { useCursorPagination } from '@/lib/pagination';
+import { rememberListPosition, useRestoreListScroll } from '@/lib/listScroll';
 import { useSyncUrlParams } from '@/lib/useUrlParams';
 import { CursorPager } from '@/components/admin/CursorPager';
+import { orderTotals } from '@/lib/orderTotals';
 import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit } from '@/lib/orderStatus';
 
 interface OrderItem {
@@ -32,6 +34,8 @@ interface OrderRead {
   customer: number;
   status: OrderStatus;
   total_price: string;
+  delivery_fee?: string;
+  governorate?: string;
   deposit_amount: string;
   notes: string;
   items: OrderItem[];
@@ -65,6 +69,7 @@ export default function AdminOrdersPage() {
   const pager = useCursorPagination();
   const { fetchPage } = pager;
   const [loading, setLoading] = useState(true);
+  useRestoreListScroll(!loading);
   const [error, setError] = useState('');
 
   // Stats
@@ -335,7 +340,7 @@ export default function AdminOrdersPage() {
                               {order.items.length} {t('منتج', 'items')}
                             </td>
                             <td className="px-5 py-4 text-sm font-medium text-secondary whitespace-nowrap">
-                              {parseFloat(order.total_price).toLocaleString()} {t('ج.م', 'EGP')}
+                              {orderTotals(order).total.toLocaleString()} {t('ج.م', 'EGP')}
                             </td>
                             <td className="px-5 py-4 text-sm text-secondary whitespace-nowrap">
                               {parseFloat(order.deposit_amount).toLocaleString()} {t('ج.م', 'EGP')}
@@ -364,7 +369,7 @@ export default function AdminOrdersPage() {
                             <td className="px-5 py-4">
                               <div className="flex items-center gap-1.5">
                                 <button
-                                  onClick={() => router.push(`/admin/orders/${order.id}`)}
+                                  onClick={() => { rememberListPosition(); router.push(`/admin/orders/${order.id}`); }}
                                   className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
                                   title={t('التفاصيل', 'Details')}
                                 >
