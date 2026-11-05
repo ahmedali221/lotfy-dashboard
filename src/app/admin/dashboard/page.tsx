@@ -55,6 +55,7 @@ export default function DashboardPage() {
 
   const [dashboard, setDashboard] = useState<StaffDashboard | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [productVisits, setProductVisits] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -72,6 +73,10 @@ export default function DashboardPage() {
       })
       .catch(() => setError(t('فشل تحميل البيانات، حاول تحديث الصفحة', 'Failed to load data, try refreshing the page')))
       .finally(() => setLoading(false));
+    // Older backends lack this endpoint; the card then stays hidden.
+    api.get('/api/site/product-visits/')
+      .then(({ data }) => setProductVisits(data.total_visits))
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -108,9 +113,16 @@ export default function DashboardPage() {
       color:  'bg-violet-500',
       optional: true,
     },
+    {
+      label:  t('إجمالي زيارات المنتجات', 'Total Product Visits'),
+      value:  productVisits,
+      icon:   Eye,
+      color:  'bg-teal-500',
+      optional: true,
+    },
   ].filter(card => !card.optional || card.value !== undefined);
 
-  const KPI_GRID_COLS: Record<number, string> = { 3: 'lg:grid-cols-3', 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5' };
+  const KPI_GRID_COLS: Record<number, string> = { 3: 'lg:grid-cols-3', 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5', 6: 'lg:grid-cols-3 xl:grid-cols-6' };
 
   const statusBreakdown = [
     { label: t('قيد الانتظار', 'Placed'),           value: dashboard?.placed_orders,           icon: Clock,        color: 'text-blue-600',   bg: 'bg-blue-50'   },

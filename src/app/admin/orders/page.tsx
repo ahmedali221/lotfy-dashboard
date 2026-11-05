@@ -137,20 +137,22 @@ export default function AdminOrdersPage() {
     try {
       const params: Record<string, string | number> = { page_size: PAGE_SIZE };
       if (statusFilter !== 'all') params.status = statusFilter;
-      const [ordersPage, dashRes] = await Promise.all([
-        fetchPage<OrderRead>('/api/orders/', params),
-        api.get('/api/orders/staff/dashboard/'),
-      ]);
-      setOrders(ordersPage);
-      setDashStats(dashRes.data);
+      setOrders(await fetchPage<OrderRead>('/api/orders/', params));
     } catch {
       setError(t('فشل تحميل الطلبات', 'Failed to load orders'));
     } finally {
       setLoading(false);
     }
-  }, [fetchPage, statusFilter, language]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchPage, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  // Status counts do not depend on the page or filter, so they load once and after status changes.
+  const fetchStats = useCallback(() => {
+    api.get('/api/orders/staff/dashboard/').then(res => setDashStats(res.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   // Status transition
   const handleStatusTransition = async (orderId: number, newStatus: OrderStatus) => {
@@ -159,6 +161,7 @@ export default function AdminOrdersPage() {
     try {
       await api.post(`/api/orders/${orderId}/transition-status/`, { status: newStatus });
       fetchOrders();
+      fetchStats();
     } catch (err: unknown) {
       const msg = getApiError(err, language, { ar: 'فشل تغيير الحالة', en: 'Failed to change status' });
       setTransitionError({ id: orderId, msg });
@@ -175,6 +178,7 @@ export default function AdminOrdersPage() {
       await api.delete(`/api/orders/${deleteId}/`);
       setDeleteId(null);
       fetchOrders();
+      fetchStats();
     } catch {
       setDeleteId(null);
     } finally {
@@ -197,6 +201,7 @@ export default function AdminOrdersPage() {
       await api.post(`/api/orders/${depositModal.id}/update-deposit/`, { deposit_amount: depositValue });
       setDepositModal(null);
       fetchOrders();
+      fetchStats();
     } catch (err: unknown) {
       setDepositError(getApiError(err, language, { ar: 'فشل التحديث', en: 'Failed to update' }));
     } finally {

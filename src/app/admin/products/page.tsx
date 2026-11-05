@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Plus, Pencil, PowerOff, Package, AlertTriangle, LayoutList, LayoutGrid, Percent } from 'lucide-react';
+import { Search, Plus, Pencil, PowerOff, Package, AlertTriangle, LayoutList, LayoutGrid, Percent, Eye, Trash2, RotateCcw } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { useCursorPagination } from '@/lib/pagination';
@@ -41,7 +41,32 @@ interface ApiProduct {
   description: string;
   images: ApiProductImage[];
   is_active: boolean;
+  is_deleted: boolean;
+  visits_count?: number;
 }
+
+type StatusFilter = 'all' | 'active' | 'inactive' | 'deleted';
+
+const STATUS_LABELS: Record<StatusFilter, { ar: string; en: string }> = {
+  all:      { ar: 'كل الحالات',    en: 'All Statuses' },
+  active:   { ar: 'نشط',           en: 'Active'       },
+  inactive: { ar: 'غير نشط',       en: 'Inactive'     },
+  deleted:  { ar: 'المحذوفات',     en: 'Deleted'      },
+};
+
+// "All" hides deleted products; they are listed under "Deleted" only.
+const STATUS_PARAMS: Record<StatusFilter, Record<string, string>> = {
+  all:      { is_deleted: 'false' },
+  active:   { is_active: 'true', is_deleted: 'false' },
+  inactive: { is_active: 'false', is_deleted: 'false' },
+  deleted:  { is_deleted: 'true' },
+};
+
+// <input type="date"> value (local day) to an ISO datetime at the start or end of that day.
+const dayBoundary = (day: string, end: boolean) =>
+  new Date(`${day}T${end ? '23:59:59.999' : '00:00:00'}`).toISOString();
+
+type PendingAction = { type: 'toggle' | 'delete' | 'restore'; id: number; active: boolean };
 
 type DisplayCategory = 'glasses_medical' | 'glasses_sunglasses' | 'lens' | 'light_filters' | 'artificial_eyes';
 
@@ -80,7 +105,7 @@ export default function AdminProductsPage() {
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [lowStockCount, setLowStockCount] = useState(0);
   const pager = useCursorPagination();
-  const { fetchPage } = pager;
+  const { fetchPage, reset: resetPager } = pager;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -88,15 +113,31 @@ export default function AdminProductsPage() {
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') ?? '');
   const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get('category') ?? 'all');
   const [colourFilter, setColourFilter] = useState(() => searchParams.get('colour') ?? '');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const s = searchParams.get('status');
+    return s && s in STATUS_PARAMS ? s as StatusFilter : 'all';
+  });
+  const [visitsFrom, setVisitsFrom] = useState(() => searchParams.get('visits_from') ?? '');
+  const [visitsTo, setVisitsTo] = useState(() => searchParams.get('visits_to') ?? '');
+  // The input updates on every keystroke; the request waits until typing pauses.
+  const [searchInput, setSearchInput] = useState(searchTerm);
+  useEffect(() => {
+    if (searchInput === searchTerm) return;
+    const timer = setTimeout(() => { resetPager(); setSearchTerm(searchInput); }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput, searchTerm, resetPager]);
   useSyncUrlParams({
     q: searchTerm,
     category: categoryFilter === 'all' ? null : categoryFilter,
     colour: colourFilter,
+    status: statusFilter === 'all' ? null : statusFilter,
+    visits_from: visitsFrom,
+    visits_to: visitsTo,
     view: viewMode === 'grid' ? 'grid' : null,
   });
   const [availableColours, setAvailableColours] = useState<string[]>([]);
 
-  const [toggleId, setToggleId] = useState<{ id: number; active: boolean } | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [showDiscount, setShowDiscount] = useState(false);
 
   const fetchProducts = useCallback(async () => {
@@ -104,7 +145,10 @@ export default function AdminProductsPage() {
     setError('');
     try {
       // Newest first by default (ids follow creation order).
-      const params: Record<string, string | number> = { page_size: PAGE_SIZE, ordering: '-id' };
+      const params: Record<string, string | number> = { page_size: PAGE_SIZE, ordering: '-id', ...STATUS_PARAMS[statusFilter] };
+      // visits_from only narrows visits_count; it does not filter products.
+      if (visitsFrom) params.visits_from = dayBoundary(visitsFrom, false);
+      if (visitsTo) params.visits_to = dayBoundary(visitsTo, true);
       if (searchTerm) params.name = searchTerm;
       if (colourFilter) params.colour = colourFilter;
       if (categoryFilter === 'glasses_medical') {
@@ -122,7 +166,7 @@ export default function AdminProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [fetchPage, searchTerm, categoryFilter, colourFilter, language]);
+  }, [fetchPage, searchTerm, categoryFilter, colourFilter, statusFilter, visitsFrom, visitsTo, language]);
 
   useEffect(() => {
     fetchProducts();
@@ -148,17 +192,31 @@ export default function AdminProductsPage() {
     return p.category as DisplayCategory;
   };
 
-  const handleToggleActive = async () => {
-    if (!toggleId) return;
-    const { id } = toggleId;
-    setToggleId(null);
+  const handleConfirmAction = async () => {
+    if (!pendingAction) return;
+    const { type, id } = pendingAction;
+    setPendingAction(null);
     try {
-      await api.post(`/api/catalog/products/${id}/toggle-active/`);
+      if (type === 'delete') await api.delete(`/api/catalog/products/${id}/`);
+      else if (type === 'restore') await api.post(`/api/catalog/products/${id}/restore/`);
+      else await api.post(`/api/catalog/products/${id}/toggle-active/`);
       fetchProducts();
     } catch (err) {
-      setError(getApiError(err, language, { ar: 'فشل تغيير حالة المنتج', en: 'Failed to change product status' }));
+      const fallback = type === 'delete'
+        ? { ar: 'فشل حذف المنتج', en: 'Failed to delete product' }
+        : type === 'restore'
+          ? { ar: 'فشل استعادة المنتج', en: 'Failed to restore product' }
+          : { ar: 'فشل تغيير حالة المنتج', en: 'Failed to change product status' };
+      setError(getApiError(err, language, fallback));
     }
   };
+
+  const statusBadge = (p: ApiProduct) =>
+    p.is_deleted
+      ? { label: t('محذوف', 'Deleted'), list: 'bg-red-50 text-red-700 border-red-200', grid: 'bg-red-500 text-white' }
+      : p.is_active
+        ? { label: t('نشط', 'Active'), list: 'bg-green-50 text-green-700 border-green-200', grid: 'bg-green-500 text-white' }
+        : { label: t('غير نشط', 'Inactive'), list: 'bg-gray-100 text-gray-500 border-gray-200', grid: 'bg-gray-400 text-white' };
 
 
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
@@ -169,12 +227,44 @@ export default function AdminProductsPage() {
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold text-secondary mb-1">{t('إدارة المنتجات', 'Products Management')}</h1>
             <p className="text-muted-foreground text-sm">{t('إدارة جميع المنتجات', 'Manage all products')}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+          {/* Visits window: changes each product's visits count, not which products are listed */}
+          <div className="flex items-center gap-2 border border-border rounded-lg px-3 py-1.5 bg-card">
+            <Eye className="w-4 h-4 text-muted-foreground shrink-0" />
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              {t('من', 'From')}
+              <input
+                type="date"
+                value={visitsFrom}
+                max={visitsTo || undefined}
+                onChange={e => { pager.reset(); setVisitsFrom(e.target.value); }}
+                className="px-1.5 py-1 border border-border rounded-md text-sm text-secondary focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </label>
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              {t('إلى', 'To')}
+              <input
+                type="date"
+                value={visitsTo}
+                min={visitsFrom || undefined}
+                onChange={e => { pager.reset(); setVisitsTo(e.target.value); }}
+                className="px-1.5 py-1 border border-border rounded-md text-sm text-secondary focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </label>
+            {(visitsFrom || visitsTo) && (
+              <button
+                onClick={() => { pager.reset(); setVisitsFrom(''); setVisitsTo(''); }}
+                className="text-xs text-primary hover:underline"
+              >
+                {t('مسح', 'Clear')}
+              </button>
+            )}
+          </div>
           <button
             onClick={() => setShowDiscount(true)}
             className="flex items-center gap-2 border border-primary text-primary hover:bg-primary/10 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
@@ -208,8 +298,8 @@ export default function AdminProductsPage() {
             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              value={searchTerm}
-              onChange={e => { pager.reset(); setSearchTerm(e.target.value); }}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
               placeholder={t('البحث باسم المنتج...', 'Search by product name...')}
               className="w-full ps-10 pe-4 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             />
@@ -235,6 +325,15 @@ export default function AdminProductsPage() {
               ))}
             </select>
           )}
+          <select
+            value={statusFilter}
+            onChange={e => { pager.reset(); setStatusFilter(e.target.value as StatusFilter); }}
+            className="w-full md:w-40 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          >
+            {(Object.keys(STATUS_LABELS) as StatusFilter[]).map(s => (
+              <option key={s} value={s}>{STATUS_LABELS[s][language]}</option>
+            ))}
+          </select>
           <div className="flex items-center gap-1 border border-border rounded-lg p-1 shrink-0">
             <button
               onClick={() => setViewMode('list')}
@@ -269,6 +368,7 @@ export default function AdminProductsPage() {
                       { ar: 'الجنس', en: 'Gender' },
                       { ar: 'السعر', en: 'Price' },
                       { ar: 'المخزون', en: 'Stock' },
+                      { ar: 'الزيارات', en: 'Visits' },
                       { ar: 'الحالة', en: 'Status' },
                       { ar: 'الإجراءات', en: 'Actions' },
                     ].map((h, i) => (
@@ -282,7 +382,7 @@ export default function AdminProductsPage() {
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
-                        {Array.from({ length: 8 }).map((_, j) => (
+                        {Array.from({ length: 9 }).map((_, j) => (
                           <td key={j} className="px-5 py-4">
                             <div className="h-4 bg-gray-100 rounded animate-pulse" />
                           </td>
@@ -291,7 +391,7 @@ export default function AdminProductsPage() {
                     ))
                   ) : products.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
+                      <td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">
                         {t('لا توجد منتجات', 'No products found')}
                       </td>
                     </tr>
@@ -333,9 +433,15 @@ export default function AdminProductsPage() {
                             {p.stock_quantity}
                           </span>
                         </td>
+                        <td className="px-5 py-4 text-sm text-secondary">
+                          <span className="inline-flex items-center gap-1">
+                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                            {(p.visits_count ?? 0).toLocaleString()}
+                          </span>
+                        </td>
                         <td className="px-5 py-4">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full border ${p.is_active ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                            {p.is_active ? t('نشط', 'Active') : t('غير نشط', 'Inactive')}
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full border ${statusBadge(p).list}`}>
+                            {statusBadge(p).label}
                           </span>
                         </td>
                         <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
@@ -343,13 +449,32 @@ export default function AdminProductsPage() {
                             <button onClick={() => openProduct(`/admin/products/${p.id}/edit`)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors" title={t('تعديل', 'Edit')}>
                               <Pencil className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => setToggleId({ id: p.id, active: p.is_active })}
-                              className={`p-1.5 rounded-lg transition-colors ${p.is_active ? 'hover:bg-orange-50 text-orange-500' : 'hover:bg-green-50 text-green-600'}`}
-                              title={p.is_active ? t('إيقاف', 'Deactivate') : t('تفعيل', 'Activate')}
-                            >
-                              <PowerOff className="w-4 h-4" />
-                            </button>
+                            {p.is_deleted ? (
+                              <button
+                                onClick={() => setPendingAction({ type: 'restore', id: p.id, active: p.is_active })}
+                                className="p-1.5 rounded-lg transition-colors hover:bg-green-50 text-green-600"
+                                title={t('استعادة', 'Restore')}
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => setPendingAction({ type: 'toggle', id: p.id, active: p.is_active })}
+                                  className={`p-1.5 rounded-lg transition-colors ${p.is_active ? 'hover:bg-orange-50 text-orange-500' : 'hover:bg-green-50 text-green-600'}`}
+                                  title={p.is_active ? t('إيقاف', 'Deactivate') : t('تفعيل', 'Activate')}
+                                >
+                                  <PowerOff className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setPendingAction({ type: 'delete', id: p.id, active: p.is_active })}
+                                  className="p-1.5 rounded-lg transition-colors hover:bg-red-50 text-red-600"
+                                  title={t('حذف', 'Delete')}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -407,8 +532,8 @@ export default function AdminProductsPage() {
                       )}
                       {/* Status badge */}
                       <div className="absolute top-2 start-2">
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${p.is_active ? 'bg-green-500 text-white' : 'bg-gray-400 text-white'}`}>
-                          {p.is_active ? t('نشط', 'Active') : t('غير نشط', 'Inactive')}
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusBadge(p).grid}`}>
+                          {statusBadge(p).label}
                         </span>
                       </div>
                       {/* Low stock badge */}
@@ -427,13 +552,32 @@ export default function AdminProductsPage() {
                         <button onClick={() => openProduct(`/admin/products/${p.id}/edit`)} className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-blue-50 transition-colors" title={t('تعديل', 'Edit')}>
                           <Pencil className="w-3.5 h-3.5 text-blue-600" />
                         </button>
-                        <button
-                          onClick={() => setToggleId({ id: p.id, active: p.is_active })}
-                          className={`w-8 h-8 bg-white rounded-full flex items-center justify-center transition-colors ${p.is_active ? 'hover:bg-orange-50' : 'hover:bg-green-50'}`}
-                          title={p.is_active ? t('إيقاف', 'Deactivate') : t('تفعيل', 'Activate')}
-                        >
-                          <PowerOff className={`w-3.5 h-3.5 ${p.is_active ? 'text-orange-500' : 'text-green-600'}`} />
-                        </button>
+                        {p.is_deleted ? (
+                          <button
+                            onClick={() => setPendingAction({ type: 'restore', id: p.id, active: p.is_active })}
+                            className="w-8 h-8 bg-white rounded-full flex items-center justify-center transition-colors hover:bg-green-50"
+                            title={t('استعادة', 'Restore')}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-green-600" />
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => setPendingAction({ type: 'toggle', id: p.id, active: p.is_active })}
+                              className={`w-8 h-8 bg-white rounded-full flex items-center justify-center transition-colors ${p.is_active ? 'hover:bg-orange-50' : 'hover:bg-green-50'}`}
+                              title={p.is_active ? t('إيقاف', 'Deactivate') : t('تفعيل', 'Activate')}
+                            >
+                              <PowerOff className={`w-3.5 h-3.5 ${p.is_active ? 'text-orange-500' : 'text-green-600'}`} />
+                            </button>
+                            <button
+                              onClick={() => setPendingAction({ type: 'delete', id: p.id, active: p.is_active })}
+                              className="w-8 h-8 bg-white rounded-full flex items-center justify-center transition-colors hover:bg-red-50"
+                              title={t('حذف', 'Delete')}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -445,9 +589,15 @@ export default function AdminProductsPage() {
                         <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">{productCatLabel(p)}</span>
                         <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">{GENDER_LABELS[p.gender]?.[language] ?? p.gender}</span>
                       </div>
-                      <p className="text-base font-bold text-primary mt-2">
-                        {parseFloat(p.price).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">{t('ج.م', 'EGP')}</span>
-                      </p>
+                      <div className="flex items-center justify-between gap-2 mt-2">
+                        <p className="text-base font-bold text-primary">
+                          {parseFloat(p.price).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">{t('ج.م', 'EGP')}</span>
+                        </p>
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title={t('الزيارات', 'Visits')}>
+                          <Eye className="w-3.5 h-3.5" />
+                          {(p.visits_count ?? 0).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -475,36 +625,59 @@ export default function AdminProductsPage() {
         />
       )}
 
-      {/* Toggle Active Confirm */}
-      {toggleId && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
-            <PowerOff className={`w-12 h-12 mx-auto mb-3 ${toggleId.active ? 'text-orange-500' : 'text-green-500'}`} />
-            <h3 className="text-lg font-bold text-secondary mb-2">
-              {toggleId.active ? t('تأكيد إيقاف التشغيل', 'Confirm Deactivate') : t('تأكيد التفعيل', 'Confirm Activate')}
-            </h3>
-            <p className="text-sm text-muted-foreground mb-5">
-              {toggleId.active
-                ? t('سيتم إخفاء المنتج من المتجر.', 'The product will be hidden from the store.')
-                : t('سيتم إظهار المنتج في المتجر.', 'The product will be visible in the store.')}
-            </p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => setToggleId(null)}
-                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50"
-              >
-                {t('إلغاء', 'Cancel')}
-              </button>
-              <button
-                onClick={handleToggleActive}
-                className={`px-4 py-2 text-white rounded-lg text-sm ${toggleId.active ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-500 hover:bg-green-600'}`}
-              >
-                {toggleId.active ? t('إيقاف', 'Deactivate') : t('تفعيل', 'Activate')}
-              </button>
+      {/* Toggle / Delete / Restore Confirm */}
+      {pendingAction && (() => {
+        const dialog = pendingAction.type === 'delete'
+          ? {
+              Icon: Trash2, iconColor: 'text-red-500', button: 'bg-red-500 hover:bg-red-600',
+              title: t('تأكيد الحذف', 'Confirm Delete'),
+              body: t('سيتم إخفاء المنتج من المتجر ونقله إلى المحذوفات. يمكنك استعادته لاحقاً.', 'The product will be hidden from the store and moved to Deleted. You can restore it later.'),
+              action: t('حذف', 'Delete'),
+            }
+          : pendingAction.type === 'restore'
+            ? {
+                Icon: RotateCcw, iconColor: 'text-green-500', button: 'bg-green-500 hover:bg-green-600',
+                title: t('تأكيد الاستعادة', 'Confirm Restore'),
+                body: t('سيعود المنتج غير نشط. فعّله ليظهر في المتجر.', 'The product returns as inactive. Activate it to show it in the store.'),
+                action: t('استعادة', 'Restore'),
+              }
+            : pendingAction.active
+              ? {
+                  Icon: PowerOff, iconColor: 'text-orange-500', button: 'bg-orange-500 hover:bg-orange-600',
+                  title: t('تأكيد إيقاف التشغيل', 'Confirm Deactivate'),
+                  body: t('سيتم إخفاء المنتج من المتجر.', 'The product will be hidden from the store.'),
+                  action: t('إيقاف', 'Deactivate'),
+                }
+              : {
+                  Icon: PowerOff, iconColor: 'text-green-500', button: 'bg-green-500 hover:bg-green-600',
+                  title: t('تأكيد التفعيل', 'Confirm Activate'),
+                  body: t('سيتم إظهار المنتج في المتجر.', 'The product will be visible in the store.'),
+                  action: t('تفعيل', 'Activate'),
+                };
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+              <dialog.Icon className={`w-12 h-12 mx-auto mb-3 ${dialog.iconColor}`} />
+              <h3 className="text-lg font-bold text-secondary mb-2">{dialog.title}</h3>
+              <p className="text-sm text-muted-foreground mb-5">{dialog.body}</p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => setPendingAction(null)}
+                  className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50"
+                >
+                  {t('إلغاء', 'Cancel')}
+                </button>
+                <button
+                  onClick={handleConfirmAction}
+                  className={`px-4 py-2 text-white rounded-lg text-sm ${dialog.button}`}
+                >
+                  {dialog.action}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </AdminLayout>
   );

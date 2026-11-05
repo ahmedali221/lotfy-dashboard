@@ -19,6 +19,7 @@ import {
   Settings,
   Newspaper,
   Users,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 const baseNavItems = [
@@ -29,6 +30,7 @@ const baseNavItems = [
   { href: '/admin/orders',         icon: ShoppingCart,    ar: 'الطلبات',     en: 'Orders'           },
   { href: '/admin/payment-methods',icon: CreditCard,      ar: 'طرق الدفع',   en: 'Payment Methods'  },
   { href: '/admin/delivery-fees',         icon: Truck,          ar: 'رسوم التوصيل',      en: 'Delivery Fees'       },
+  { href: '/admin/site-images',    icon: ImageIcon,       ar: 'صورة الواجهة', en: 'Header Image'     },
 ];
 
 export function AdminLayout({ children }: { children: ReactNode }) {

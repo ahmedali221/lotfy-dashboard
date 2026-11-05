@@ -13,6 +13,9 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
@@ -38,6 +41,8 @@ interface ApiProduct {
   low_stock_threshold: number;
   description: string;
   is_active: boolean;
+  is_deleted: boolean;
+  visits_count?: number;
   images: ProductImage[];
 }
 
@@ -98,6 +103,7 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toggling, setToggling] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [imgIndex, setImgIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
 
@@ -124,14 +130,45 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Mutation responses omit visits_count, so merge them into the loaded product.
   const handleToggle = async () => {
     if (!product) return;
     setToggling(true);
+    setError('');
     try {
       const { data } = await api.post(`/api/catalog/products/${id}/toggle-active/`);
-      setProduct(data);
+      setProduct(prev => prev && { ...prev, ...data });
     } catch (err) {
       setError(getApiError(err, language, { ar: 'فشل تغيير حالة المنتج', en: 'Failed to change product status' }));
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!product) return;
+    setConfirmDelete(false);
+    setToggling(true);
+    setError('');
+    try {
+      await api.delete(`/api/catalog/products/${id}/`);
+      setProduct(prev => prev && { ...prev, is_deleted: true, is_active: false });
+    } catch (err) {
+      setError(getApiError(err, language, { ar: 'فشل حذف المنتج', en: 'Failed to delete product' }));
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!product) return;
+    setToggling(true);
+    setError('');
+    try {
+      const { data } = await api.post(`/api/catalog/products/${id}/restore/`);
+      setProduct(prev => prev && { ...prev, ...data });
+    } catch (err) {
+      setError(getApiError(err, language, { ar: 'فشل استعادة المنتج', en: 'Failed to restore product' }));
     } finally {
       setToggling(false);
     }
@@ -168,18 +205,39 @@ export default function ProductDetailPage() {
                 <Pencil className="w-4 h-4" />
                 {t('تعديل', 'Edit')}
               </button>
-              <button
-                onClick={handleToggle}
-                disabled={toggling}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-white transition-colors disabled:opacity-60 ${
-                  product.is_active
-                    ? 'bg-orange-500 hover:bg-orange-600'
-                    : 'bg-green-500 hover:bg-green-600'
-                }`}
-              >
-                <PowerOff className="w-4 h-4" />
-                {product.is_active ? t('إيقاف', 'Deactivate') : t('تفعيل', 'Activate')}
-              </button>
+              {product.is_deleted ? (
+                <button
+                  onClick={handleRestore}
+                  disabled={toggling}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-white transition-colors disabled:opacity-60 bg-green-500 hover:bg-green-600"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  {t('استعادة', 'Restore')}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleToggle}
+                    disabled={toggling}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-white transition-colors disabled:opacity-60 ${
+                      product.is_active
+                        ? 'bg-orange-500 hover:bg-orange-600'
+                        : 'bg-green-500 hover:bg-green-600'
+                    }`}
+                  >
+                    <PowerOff className="w-4 h-4" />
+                    {product.is_active ? t('إيقاف', 'Deactivate') : t('تفعيل', 'Activate')}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={toggling}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-white transition-colors disabled:opacity-60 bg-red-500 hover:bg-red-600"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {t('حذف', 'Delete')}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -318,11 +376,13 @@ export default function ProductDetailPage() {
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <h1 className="text-2xl font-bold text-secondary">{product.name}</h1>
                   <span className={`shrink-0 px-2.5 py-1 text-xs font-medium rounded-full border ${
-                    product.is_active
-                      ? 'bg-green-50 text-green-700 border-green-200'
-                      : 'bg-gray-100 text-gray-500 border-gray-200'
+                    product.is_deleted
+                      ? 'bg-red-50 text-red-700 border-red-200'
+                      : product.is_active
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-gray-100 text-gray-500 border-gray-200'
                   }`}>
-                    {product.is_active ? t('نشط', 'Active') : t('غير نشط', 'Inactive')}
+                    {product.is_deleted ? t('محذوف', 'Deleted') : product.is_active ? t('نشط', 'Active') : t('غير نشط', 'Inactive')}
                   </span>
                 </div>
                 {product.brand && (
@@ -338,8 +398,8 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              {/* Price + stock */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Price + stock + visits */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div className="bg-card rounded-2xl border border-border p-5">
                   <p className="text-xs text-muted-foreground mb-1">{t('السعر', 'Price')}</p>
                   <p className="text-2xl font-bold text-primary">
@@ -363,6 +423,14 @@ export default function ProductDetailPage() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {t(`حد التنبيه: ${product.low_stock_threshold}`, `Alert threshold: ${product.low_stock_threshold}`)}
                   </p>
+                </div>
+                <div className="bg-card rounded-2xl border border-border p-5">
+                  <p className="text-xs text-muted-foreground mb-1">{t('الزيارات', 'Visits')}</p>
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <p className="text-2xl font-bold text-secondary">{(product.visits_count ?? 0).toLocaleString()}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{t('كل الوقت', 'All time')}</p>
                 </div>
               </div>
 
@@ -447,6 +515,26 @@ export default function ProductDetailPage() {
           </div>
         )}
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+            <Trash2 className="w-12 h-12 mx-auto mb-3 text-red-500" />
+            <h3 className="text-lg font-bold text-secondary mb-2">{t('تأكيد الحذف', 'Confirm Delete')}</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              {t('سيتم إخفاء المنتج من المتجر ونقله إلى المحذوفات. يمكنك استعادته لاحقاً.', 'The product will be hidden from the store and moved to Deleted. You can restore it later.')}
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50">
+                {t('إلغاء', 'Cancel')}
+              </button>
+              <button onClick={handleDelete} className="px-4 py-2 text-white rounded-lg text-sm bg-red-500 hover:bg-red-600">
+                {t('حذف', 'Delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

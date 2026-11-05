@@ -51,7 +51,8 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
-    fetchAllPages<DiscountProduct>('/api/catalog/products/')
+    // Staff see deleted products too; they cannot be discounted.
+    fetchAllPages<DiscountProduct>('/api/catalog/products/', { is_deleted: 'false' })
       .then(setProducts)
       .catch(() => setError(t('فشل تحميل المنتجات', 'Failed to load products')))
       .finally(() => setLoading(false));
@@ -187,52 +188,75 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
         </div>
 
         {/* Product list */}
-        <div className="flex-1 overflow-y-auto p-3">
+        {/* Same card grid as the products page grid view */}
+        <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />)}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="bg-card rounded-2xl border border-border overflow-hidden animate-pulse">
+                  <div className="h-52 bg-gray-100" />
+                  <div className="p-3 space-y-2">
+                    <div className="h-3 bg-gray-100 rounded w-3/4" />
+                    <div className="h-4 bg-gray-100 rounded w-1/3" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : visible.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">{t('لا توجد منتجات', 'No products found')}</p>
           ) : (
-            visible.map(p => {
-              const base = basePriceOf(p);
-              const currentPct = discountPctOf(p);
-              const checked = selected.has(p.id);
-              return (
-                <label
-                  key={p.id}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-gray-50 ${!p.is_active ? 'opacity-60' : ''}`}
-                >
-                  <input type="checkbox" checked={checked} onChange={() => toggle(p.id)} className="w-4 h-4 accent-primary" />
-                  <div className="w-20 h-20 shrink-0 rounded-lg border border-border bg-gray-50 overflow-hidden flex items-center justify-center">
-                    {firstImageOf(p) ? (
-                      <img src={firstImageOf(p)!} alt={p.name} loading="lazy" className="w-full h-full object-contain" />
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground">{t('بدون صورة', 'No image')}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-secondary truncate">{p.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {categoryLabels[displayCategory(p)]?.[language]}
-                      {currentPct > 0 && ` · ${t(`خصم حالي ${currentPct}%`, `current ${currentPct}% off`)}`}
-                    </p>
-                  </div>
-                  <div className="flex items-baseline gap-2 text-sm shrink-0">
-                    {checked && pctValid ? (
-                      <>
-                        <span className="text-muted-foreground line-through">{parseFloat(p.price).toLocaleString()}</span>
-                        <span className="font-semibold text-primary">{parseFloat(applyDiscount(base, pct)).toLocaleString()}</span>
-                      </>
-                    ) : (
-                      <span className="text-secondary">{parseFloat(p.price).toLocaleString()}</span>
-                    )}
-                    <span className="text-xs text-muted-foreground">{t('ج.م', 'EGP')}</span>
-                  </div>
-                </label>
-              );
-            })
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {visible.map(p => {
+                const base = basePriceOf(p);
+                const currentPct = discountPctOf(p);
+                const checked = selected.has(p.id);
+                const image = firstImageOf(p);
+                return (
+                  <label
+                    key={p.id}
+                    className={`bg-card rounded-2xl border-2 overflow-hidden cursor-pointer transition-all hover:shadow-lg ${checked ? 'border-primary' : 'border-border'} ${!p.is_active ? 'opacity-60' : ''}`}
+                  >
+                    <div className="relative h-52 bg-gray-100 overflow-hidden">
+                      {image ? (
+                        <img src={image} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                          {t('بدون صورة', 'No image')}
+                        </div>
+                      )}
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(p.id)}
+                        className="absolute top-2 start-2 w-5 h-5 accent-primary"
+                      />
+                      {currentPct > 0 && (
+                        <span className="absolute top-2 end-2 px-2 py-0.5 text-xs font-medium rounded-full bg-red-500 text-white" dir="ltr">
+                          -{currentPct}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <p className="text-sm font-semibold text-secondary truncate">{p.name}</p>
+                      <span className="inline-block mt-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">
+                        {categoryLabels[displayCategory(p)]?.[language]}
+                      </span>
+                      <div className="flex items-baseline gap-1.5 mt-2 flex-wrap">
+                        {checked && pctValid ? (
+                          <>
+                            <span className="text-base font-bold text-primary">{parseFloat(applyDiscount(base, pct)).toLocaleString()}</span>
+                            <span className="text-xs text-muted-foreground line-through">{parseFloat(p.price).toLocaleString()}</span>
+                          </>
+                        ) : (
+                          <span className="text-base font-bold text-primary">{parseFloat(p.price).toLocaleString()}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">{t('ج.م', 'EGP')}</span>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
           )}
         </div>
 
