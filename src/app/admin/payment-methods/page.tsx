@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { Plus, Pencil, Trash2, CreditCard, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, CreditCard, ToggleLeft, ToggleRight } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { fetchAllPages } from '@/lib/pagination';
+import { useCursorPagination } from '@/lib/pagination';
+import { CursorPager } from '@/components/admin/CursorPager';
 
 const PAGE_SIZE = 8;
 
@@ -24,7 +25,7 @@ export default function AdminPaymentMethodsPage() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [page, setPage] = useState(1);
+  const pager = useCursorPagination();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -41,14 +42,13 @@ export default function AdminPaymentMethodsPage() {
     setLoading(true);
     setError('');
     try {
-      setMethods(await fetchAllPages<PaymentMethod>('/api/orders/payment-methods/'));
-      setPage(1);
+      setMethods(await pager.fetchPage<PaymentMethod>('/api/orders/payment-methods/', { page_size: PAGE_SIZE }));
     } catch {
       setError(t('فشل تحميل طرق الدفع', 'Failed to load payment methods'));
     } finally {
       setLoading(false);
     }
-  }, [language]);
+  }, [language, pager.fetchPage]);
 
   useEffect(() => {
     fetchMethods();
@@ -115,10 +115,6 @@ export default function AdminPaymentMethodsPage() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(methods.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const slice = methods.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -180,9 +176,9 @@ export default function AdminPaymentMethodsPage() {
                 </tr>
               ) : (
                 <>
-                  {slice.map((m, idx) => (
+                  {methods.map((m, idx) => (
                     <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4 text-sm text-muted-foreground">{(safePage - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
                       <td className="px-5 py-4 text-sm font-medium text-secondary">{m.name}</td>
                       <td className="px-5 py-4 text-sm text-muted-foreground">{m.number || '—'}</td>
                       <td className="px-5 py-4">
@@ -222,40 +218,19 @@ export default function AdminPaymentMethodsPage() {
                       </td>
                     </tr>
                   ))}
-                  {totalPages > 1 && (
-                    <tr>
-                      <td colSpan={5} className="px-5 py-3 border-t border-border">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm text-muted-foreground">
-                            {t(
-                              `${methods.length} طريقة — صفحة ${safePage} من ${totalPages}`,
-                              `${methods.length} methods — Page ${safePage} of ${totalPages}`
-                            )}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                              disabled={safePage === totalPages}
-                              className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                            >
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setPage(p => Math.max(1, p - 1))}
-                              disabled={safePage === 1}
-                              className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                            >
-                              <ChevronLeft className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
                 </>
               )}
             </tbody>
           </table>
+          <CursorPager
+            className="p-4 border-t border-border"
+            pageNumber={pager.pageNumber}
+            hasNext={pager.hasNext}
+            hasPrevious={pager.hasPrevious}
+            onNext={pager.goNext}
+            onPrevious={pager.goPrevious}
+            disabled={loading}
+          />
         </div>
       </div>
 

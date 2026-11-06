@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { Plus, Pencil, Trash2, Users, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, Eye } from 'lucide-react';
 import api from '@/lib/axios';
-import { fetchAllPages } from '@/lib/pagination';
+import { useCursorPagination } from '@/lib/pagination';
+import { CursorPager } from '@/components/admin/CursorPager';
 
 const PAGE_SIZE = 5;
 
@@ -36,21 +37,20 @@ export default function AdminStaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [page, setPage] = useState(1);
+  const pager = useCursorPagination();
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const fetchStaff = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setStaff(await fetchAllPages<StaffMember>('/api/auth/staff/'));
-      setPage(1);
+      setStaff(await pager.fetchPage<StaffMember>('/api/auth/staff/', { page_size: PAGE_SIZE }));
     } catch {
       setError(t('فشل تحميل الموظفين', 'Failed to load staff'));
     } finally {
       setLoading(false);
     }
-  }, [language]);
+  }, [language, pager.fetchPage]);
 
   useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
@@ -63,10 +63,6 @@ export default function AdminStaffPage() {
       fetchStaff();
     }
   };
-
-  const totalPages = Math.max(1, Math.ceil(staff.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const slice = staff.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <AdminLayout>
@@ -122,9 +118,9 @@ export default function AdminStaffPage() {
                 </tr>
               ) : (
                 <>
-                  {slice.map((member, idx) => (
+                  {staff.map((member, idx) => (
                     <tr key={member.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4 text-sm text-muted-foreground">{(safePage - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
                       <td className="px-5 py-4 text-sm font-medium text-secondary">{member.name}</td>
                       <td className="px-5 py-4 text-sm text-muted-foreground">{member.email}</td>
                       <td className="px-5 py-4">
@@ -156,40 +152,19 @@ export default function AdminStaffPage() {
                       </td>
                     </tr>
                   ))}
-                  {totalPages > 1 && (
-                    <tr>
-                      <td colSpan={4} className="px-5 py-3 border-t border-border">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm text-muted-foreground">
-                            {t(
-                              `${staff.length} موظف — صفحة ${safePage} من ${totalPages}`,
-                              `${staff.length} staff — Page ${safePage} of ${totalPages}`
-                            )}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                              disabled={safePage === totalPages}
-                              className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                            >
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setPage(p => Math.max(1, p - 1))}
-                              disabled={safePage === 1}
-                              className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                            >
-                              <ChevronLeft className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
                 </>
               )}
             </tbody>
           </table>
+          <CursorPager
+            className="p-4 border-t border-border"
+            pageNumber={pager.pageNumber}
+            hasNext={pager.hasNext}
+            hasPrevious={pager.hasPrevious}
+            onNext={pager.goNext}
+            onPrevious={pager.goPrevious}
+            disabled={loading}
+          />
         </div>
       </div>
 

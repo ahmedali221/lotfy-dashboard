@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { Plus, Pencil, Trash2, Truck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, Truck } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { fetchAllPages } from '@/lib/pagination';
+import { useCursorPagination } from '@/lib/pagination';
+import { CursorPager } from '@/components/admin/CursorPager';
 
 const PAGE_SIZE = 8;
 
@@ -23,7 +24,7 @@ export default function AdminDeliveryFeesPage() {
   const [fees, setFees] = useState<DeliveryFee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [page, setPage] = useState(1);
+  const pager = useCursorPagination();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -38,14 +39,13 @@ export default function AdminDeliveryFeesPage() {
     setLoading(true);
     setError('');
     try {
-      setFees(await fetchAllPages<DeliveryFee>('/api/orders/delivery-fees/'));
-      setPage(1);
+      setFees(await pager.fetchPage<DeliveryFee>('/api/orders/delivery-fees/', { page_size: PAGE_SIZE }));
     } catch {
       setError(t('فشل تحميل رسوم التوصيل', 'Failed to load delivery fees'));
     } finally {
       setLoading(false);
     }
-  }, [language]);
+  }, [language, pager.fetchPage]);
 
   useEffect(() => {
     fetchFees();
@@ -105,10 +105,6 @@ export default function AdminDeliveryFeesPage() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(fees.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const slice = fees.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -167,9 +163,9 @@ export default function AdminDeliveryFeesPage() {
                 </tr>
               ) : (
                 <>
-                  {slice.map((f, idx) => (
+                  {fees.map((f, idx) => (
                     <tr key={f.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4 text-sm text-muted-foreground">{(safePage - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
                       <td className="px-5 py-4 text-sm font-medium text-secondary">{f.governorate}</td>
                       <td className="px-5 py-4 text-sm text-secondary">
                         <span className="inline-flex items-center gap-1 font-semibold">
@@ -197,40 +193,19 @@ export default function AdminDeliveryFeesPage() {
                       </td>
                     </tr>
                   ))}
-                  {totalPages > 1 && (
-                    <tr>
-                      <td colSpan={4} className="px-5 py-3 border-t border-border">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm text-muted-foreground">
-                            {t(
-                              `${fees.length} محافظة — صفحة ${safePage} من ${totalPages}`,
-                              `${fees.length} governorates — Page ${safePage} of ${totalPages}`
-                            )}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                              disabled={safePage === totalPages}
-                              className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                            >
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setPage(p => Math.max(1, p - 1))}
-                              disabled={safePage === 1}
-                              className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                            >
-                              <ChevronLeft className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
                 </>
               )}
             </tbody>
           </table>
+          <CursorPager
+            className="p-4 border-t border-border"
+            pageNumber={pager.pageNumber}
+            hasNext={pager.hasNext}
+            hasPrevious={pager.hasPrevious}
+            onNext={pager.goNext}
+            onPrevious={pager.goPrevious}
+            disabled={loading}
+          />
         </div>
       </div>
 

@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { Plus, Pencil, Trash2, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { fetchAllPages } from '@/lib/pagination';
+import { useCursorPagination } from '@/lib/pagination';
+import { CursorPager } from '@/components/admin/CursorPager';
 
 const PAGE_SIZE = 5;
 
@@ -22,7 +23,7 @@ export default function AdminBrandsPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [page, setPage] = useState(1);
+  const pager = useCursorPagination();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -36,14 +37,13 @@ export default function AdminBrandsPage() {
     setLoading(true);
     setError('');
     try {
-      setBrands(await fetchAllPages<Brand>('/api/catalog/brands/'));
-      setPage(1);
+      setBrands(await pager.fetchPage<Brand>('/api/catalog/brands/', { page_size: PAGE_SIZE }));
     } catch {
       setError(t('فشل تحميل الماركات', 'Failed to load brands'));
     } finally {
       setLoading(false);
     }
-  }, [language]);
+  }, [language, pager.fetchPage]);
 
   useEffect(() => {
     fetchBrands();
@@ -148,15 +148,11 @@ export default function AdminBrandsPage() {
                     {t('لا توجد ماركات بعد', 'No brands yet')}
                   </td>
                 </tr>
-              ) : (() => {
-                const totalPages = Math.max(1, Math.ceil(brands.length / PAGE_SIZE));
-                const safePage = Math.min(page, totalPages);
-                const slice = brands.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-                return (
-                  <>
-                    {slice.map((brand, idx) => (
+              ) : (
+                <>
+                    {brands.map((brand, idx) => (
                       <tr key={brand.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-5 py-4 text-sm text-muted-foreground">{(safePage - 1) * PAGE_SIZE + idx + 1}</td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
                         <td className="px-5 py-4 text-sm font-medium text-secondary">{brand.name}</td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-1.5">
@@ -178,38 +174,19 @@ export default function AdminBrandsPage() {
                         </td>
                       </tr>
                     ))}
-                    {totalPages > 1 && (
-                      <tr>
-                        <td colSpan={3} className="px-5 py-3 border-t border-border">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm text-muted-foreground">
-                              {t(`${brands.length} ماركة — صفحة ${safePage} من ${totalPages}`, `${brands.length} brands — Page ${safePage} of ${totalPages}`)}
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                disabled={safePage === totalPages}
-                                className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                              >
-                                <ChevronRight className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={safePage === 1}
-                                className="p-1.5 border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50"
-                              >
-                                <ChevronLeft className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                );
-              })()}
+                </>
+              )}
             </tbody>
           </table>
+          <CursorPager
+            className="p-4 border-t border-border"
+            pageNumber={pager.pageNumber}
+            hasNext={pager.hasNext}
+            hasPrevious={pager.hasPrevious}
+            onNext={pager.goNext}
+            onPrevious={pager.goPrevious}
+            disabled={loading}
+          />
         </div>
       </div>
 
