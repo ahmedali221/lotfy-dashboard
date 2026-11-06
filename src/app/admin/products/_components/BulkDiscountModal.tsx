@@ -231,8 +231,8 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
                         className="absolute top-2 start-2 w-5 h-5 accent-primary"
                       />
                       {currentPct > 0 && (
-                        <span className="absolute top-2 end-2 px-2 py-0.5 text-xs font-medium rounded-full bg-red-500 text-white" dir="ltr">
-                          -{currentPct}%
+                        <span className="absolute top-2 end-2 px-2 py-0.5 text-xs font-medium rounded-full bg-red-500 text-white">
+                          <span dir="ltr">-{currentPct}%</span>
                         </span>
                       )}
                     </div>
