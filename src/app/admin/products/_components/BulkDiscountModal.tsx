@@ -9,6 +9,7 @@ import { applyDiscount, basePriceOf, discountPayload, discountPctOf, isValidDisc
 interface DiscountProduct {
   id: number;
   name: string;
+  brand: { id: number; name: string } | null;
   category: 'glasses' | 'lens' | 'light_filters' | 'artificial_eyes';
   lens_type: 'medical' | 'sunglasses' | null;
   price: string;
@@ -20,6 +21,7 @@ interface DiscountProduct {
 interface Props {
   language: 'ar' | 'en';
   categoryLabels: Record<string, { ar: string; en: string }>;
+  brands: { id: number; name: string }[];
   onClose: () => void;
   onApplied: () => void;
 }
@@ -38,7 +40,7 @@ const firstImageOf = (p: DiscountProduct) => {
 const displayCategory = (p: DiscountProduct) =>
   p.category === 'glasses' ? (p.lens_type === 'sunglasses' ? 'glasses_sunglasses' : 'glasses_medical') : p.category;
 
-export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied }: Props) {
+export function BulkDiscountModal({ language, categoryLabels, brands, onClose, onApplied }: Props) {
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
   const [products, setProducts] = useState<DiscountProduct[]>([]);
@@ -47,6 +49,7 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
   const [pctInput, setPctInput] = useState('');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const [brand, setBrand] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [applying, setApplying] = useState(false);
 
@@ -66,9 +69,10 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
     const q = search.trim().toLowerCase();
     return products.filter(p =>
       (category === 'all' || displayCategory(p) === category) &&
-      (!q || p.name.toLowerCase().includes(q))
+      (!brand || String(p.brand?.id) === brand) &&
+      (!q || p.name.toLowerCase().includes(q) || !!p.brand?.name.toLowerCase().includes(q))
     );
-  }, [products, search, category]);
+  }, [products, search, category, brand]);
 
   const allVisibleSelected = visible.length > 0 && visible.every(p => selected.has(p.id));
 
@@ -148,7 +152,7 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={t('البحث باسم المنتج...', 'Search by product name...')}
+                placeholder={t('البحث باسم المنتج أو الماركة...', 'Search by product or brand name...')}
                 className="w-full ps-10 pe-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
@@ -161,6 +165,18 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
                 <option key={c} value={c}>{categoryLabels[c][language]}</option>
               ))}
             </select>
+            {brands.length > 0 && (
+              <select
+                value={brand}
+                onChange={e => setBrand(e.target.value)}
+                className="sm:w-52 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">{t('كل الماركات', 'All Brands')}</option>
+                {brands.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
@@ -238,6 +254,7 @@ export function BulkDiscountModal({ language, categoryLabels, onClose, onApplied
                     </div>
                     <div className="p-3">
                       <p className="text-sm font-semibold text-secondary truncate">{p.name}</p>
+                      {p.brand && <p className="text-xs text-muted-foreground truncate">{p.brand.name}</p>}
                       <span className="inline-block mt-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">
                         {categoryLabels[displayCategory(p)]?.[language]}
                       </span>

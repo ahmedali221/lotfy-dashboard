@@ -3,13 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
-import { Plus, Pencil, Trash2, Truck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Truck, Gift } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { useCursorPagination } from '@/lib/pagination';
-import { CursorPager } from '@/components/admin/CursorPager';
+import { useInfiniteList } from '@/lib/pagination';
+import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 20;
 
 interface DeliveryFee {
   id: number;
@@ -21,10 +21,10 @@ export default function AdminDeliveryFeesPage() {
   const { language } = useLanguage();
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
-  const [fees, setFees] = useState<DeliveryFee[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Rows load in batches as the list scrolls (cursor pagination, no page numbers).
+  const list = useInfiniteList<DeliveryFee>(PAGE_SIZE);
+  const { items: fees, loading, load } = list;
   const [error, setError] = useState('');
-  const pager = useCursorPagination();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -35,17 +35,49 @@ export default function AdminDeliveryFeesPage() {
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
+  // Free shipping threshold (checkout config). Empty means free shipping is off.
+  const [freeThreshold, setFreeThreshold] = useState<string | null>(null);
+  const [thresholdOpen, setThresholdOpen] = useState(false);
+  const [thresholdValue, setThresholdValue] = useState('');
+  const [thresholdSaving, setThresholdSaving] = useState(false);
+  const [thresholdError, setThresholdError] = useState('');
+
+  useEffect(() => {
+    api.get('/api/orders/checkout-config/').then(res => {
+      setFreeThreshold(res.data.free_shipping_threshold);
+    }).catch(() => {});
+  }, []);
+
+  const handleThresholdSave = async () => {
+    const raw = thresholdValue.trim();
+    const val = parseFloat(raw);
+    if (raw && (isNaN(val) || val < 0)) {
+      setThresholdError(t('يرجى إدخال رقم صحيح', 'Please enter a valid number'));
+      return;
+    }
+    setThresholdSaving(true);
+    setThresholdError('');
+    try {
+      const { data } = await api.patch('/api/orders/checkout-config/', {
+        free_shipping_threshold: raw ? val.toFixed(2) : null,
+      });
+      setFreeThreshold(data.free_shipping_threshold);
+      setThresholdOpen(false);
+    } catch (err: unknown) {
+      setThresholdError(getApiError(err, language, { ar: 'فشل الحفظ', en: 'Failed to save' }));
+    } finally {
+      setThresholdSaving(false);
+    }
+  };
+
   const fetchFees = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
-      setFees(await pager.fetchPage<DeliveryFee>('/api/orders/delivery-fees/', { page_size: PAGE_SIZE }));
+      await load('/api/orders/delivery-fees/', {});
     } catch {
       setError(t('فشل تحميل رسوم التوصيل', 'Failed to load delivery fees'));
-    } finally {
-      setLoading(false);
     }
-  }, [language, pager.fetchPage]);
+  }, [language, load]);
 
   useEffect(() => {
     fetchFees();
@@ -123,6 +155,30 @@ export default function AdminDeliveryFeesPage() {
           </button>
         </div>
 
+        {/* Free Shipping */}
+        <div className="bg-card rounded-xl shadow-sm border border-border p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Gift className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t('شحن مجاني للطلبات من', 'Free shipping for orders from')}</p>
+              <p className="text-lg font-bold text-secondary">
+                {freeThreshold
+                  ? `${parseFloat(freeThreshold).toLocaleString()} ${t('ج.م', 'EGP')}`
+                  : t('غير مفعّل', 'Off')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setThresholdValue(freeThreshold ?? ''); setThresholdError(''); setThresholdOpen(true); }}
+            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-dark font-medium"
+          >
+            <Pencil className="w-4 h-4" />
+            {t('تعديل', 'Edit')}
+          </button>
+        </div>
+
         {/* Table */}
         <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
           {error && (
@@ -165,7 +221,7 @@ export default function AdminDeliveryFeesPage() {
                 <>
                   {fees.map((f, idx) => (
                     <tr key={f.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">{idx + 1}</td>
                       <td className="px-5 py-4 text-sm font-medium text-secondary">{f.governorate}</td>
                       <td className="px-5 py-4 text-sm text-secondary">
                         <span className="inline-flex items-center gap-1 font-semibold">
@@ -197,14 +253,12 @@ export default function AdminDeliveryFeesPage() {
               )}
             </tbody>
           </table>
-          <CursorPager
+          <InfiniteScrollSentinel
             className="p-4 border-t border-border"
-            pageNumber={pager.pageNumber}
-            hasNext={pager.hasNext}
-            hasPrevious={pager.hasPrevious}
-            onNext={pager.goNext}
-            onPrevious={pager.goPrevious}
-            disabled={loading}
+            hasMore={list.hasMore}
+            loading={list.loadingMore}
+            failed={list.loadMoreFailed}
+            onLoadMore={list.loadMore}
           />
         </div>
       </div>
@@ -269,6 +323,57 @@ export default function AdminDeliveryFeesPage() {
                 className="px-5 py-2 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-medium"
               >
                 {saving ? t('جارٍ الحفظ...', 'Saving...') : t('حفظ', 'Save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Free Shipping Modal */}
+      {thresholdOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-xl font-bold text-secondary mb-5">{t('الشحن المجاني', 'Free Shipping')}</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-secondary mb-1">
+                  {t('الحد الأدنى للطلب (ج.م)', 'Minimum order (EGP)')}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={thresholdValue}
+                  onChange={e => setThresholdValue(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleThresholdSave()}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="2500"
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('الطلبات التي يصل مجموعها لهذا المبلغ تُشحن مجاناً. اتركه فارغاً لإيقاف الشحن المجاني.',
+                    'Orders reaching this subtotal pay no delivery fee. Leave empty to turn free shipping off.')}
+                </p>
+              </div>
+              {thresholdError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {thresholdError}
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setThresholdOpen(false)}
+                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50"
+              >
+                {t('إلغاء', 'Cancel')}
+              </button>
+              <button
+                onClick={handleThresholdSave}
+                disabled={thresholdSaving}
+                className="px-5 py-2 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white rounded-lg text-sm font-medium"
+              >
+                {thresholdSaving ? t('جارٍ الحفظ...', 'Saving...') : t('حفظ', 'Save')}
               </button>
             </div>
           </div>

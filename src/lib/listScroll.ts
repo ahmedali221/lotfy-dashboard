@@ -7,12 +7,8 @@ const RETURN_KEY = 'admin:listReturn';
 
 const scroller = () => document.getElementById(ADMIN_SCROLL_ID);
 
-export function scrollAdminToTop() {
-  scroller()?.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
 // Call before leaving a list for a detail/edit page, so the user can be sent
-// back to the same filters, page and scroll position afterwards.
+// back to the same filters and scroll position afterwards.
 export function rememberListPosition() {
   try {
     sessionStorage.setItem(RETURN_KEY, JSON.stringify({

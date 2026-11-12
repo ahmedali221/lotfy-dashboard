@@ -1,7 +1,7 @@
-import { Clock, CheckCircle, XCircle, Truck, ShoppingBag, Wallet, HelpCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Truck, ShoppingBag, Wallet, HelpCircle, Ban, Undo2 } from 'lucide-react';
 import type { ElementType } from 'react';
 
-export type OrderStatus = 'placed' | 'approved' | 'deposited' | 'rejected' | 'ready_to_pick_up' | 'picked_up';
+export type OrderStatus = 'placed' | 'approved' | 'deposited' | 'rejected' | 'ready_to_pick_up' | 'picked_up' | 'cancelled' | 'returned';
 
 export interface OrderStatusConfig {
   ar: string;
@@ -17,6 +17,8 @@ export const ORDER_STATUS_CONFIG: Record<OrderStatus, OrderStatusConfig> = {
   rejected:         { ar: 'مرفوض',          en: 'Rejected',         color: 'bg-red-100 text-red-700 border-red-200',          icon: XCircle     },
   ready_to_pick_up: { ar: 'جاهز للاستلام', en: 'Ready to Pick Up', color: 'bg-green-100 text-green-700 border-green-200',    icon: Truck       },
   picked_up:        { ar: 'تم الاستلام',   en: 'Picked Up',        color: 'bg-gray-100 text-gray-600 border-gray-200',       icon: ShoppingBag },
+  cancelled:        { ar: 'ملغي',           en: 'Cancelled',        color: 'bg-orange-100 text-orange-700 border-orange-200', icon: Ban         },
+  returned:         { ar: 'مرتجع',          en: 'Returned',         color: 'bg-amber-100 text-amber-800 border-amber-200',    icon: Undo2       },
 };
 
 export const ORDER_STATUSES = Object.keys(ORDER_STATUS_CONFIG) as OrderStatus[];
@@ -25,11 +27,25 @@ export const ORDER_STATUSES = Object.keys(ORDER_STATUS_CONFIG) as OrderStatus[];
 // verified deposit makes the backend return `deposited` instead of `approved`.
 export const NEXT_ORDER_STATUSES: Record<OrderStatus, OrderStatus[]> = {
   placed:           ['approved', 'rejected'],
-  approved:         ['ready_to_pick_up'],
-  deposited:        ['ready_to_pick_up'],
+  approved:         ['ready_to_pick_up', 'cancelled'],
+  deposited:        ['ready_to_pick_up', 'cancelled'],
   rejected:         [],
-  ready_to_pick_up: ['picked_up'],
-  picked_up:        [],
+  ready_to_pick_up: ['picked_up', 'cancelled'],
+  picked_up:        ['returned'],
+  cancelled:        [],
+  returned:         [],
+};
+
+// Cancelling or returning puts the items back in stock and cannot be undone,
+// so staff confirm it and may give a reason, which is saved on the order event.
+// Returns the reason (possibly empty) to send, or null when staff back out.
+export const confirmTransition = (status: OrderStatus, t: (ar: string, en: string) => string): string | null => {
+  if (status !== 'cancelled' && status !== 'returned') return '';
+  const question = status === 'cancelled'
+    ? t('تأكيد إلغاء الطلب؟ سيتم إرجاع المنتجات للمخزون.\nسبب الإلغاء (اختياري):', 'Cancel this order? Items go back to stock.\nReason (optional):')
+    : t('تأكيد ارتجاع الطلب؟ سيتم إرجاع المنتجات للمخزون.\nسبب الارتجاع (اختياري):', 'Mark this order as returned? Items go back to stock.\nReason (optional):');
+  const reason = window.prompt(question, '');
+  return reason === null ? null : reason.trim();
 };
 
 // The API may add statuses before the dashboard knows about them, so never
@@ -46,7 +62,7 @@ export const getNextOrderStatuses = (status: string): OrderStatus[] =>
   NEXT_ORDER_STATUSES[status as OrderStatus] ?? [];
 
 // Backend rules (orders/services.py): staff may edit the deposit only after the
-// order leaves `placed`, and never on rejected or picked-up orders.
+// order leaves `placed`, and never on rejected, picked-up, cancelled or returned orders.
 export const canUpdateDeposit = (status: string) =>
   ['approved', 'deposited', 'ready_to_pick_up'].includes(status);
 
@@ -65,6 +81,8 @@ const ORDER_EVENT_LABELS: Record<string, { ar: string; en: string }> = {
   price_updated:          { ar: 'تم تعديل السعر',         en: 'Price updated'          },
   ready_to_pick_up:       { ar: 'جاهز للاستلام',          en: 'Ready to pick up'       },
   picked_up:              { ar: 'تم الاستلام',            en: 'Picked up'              },
+  order_cancelled:        { ar: 'تم إلغاء الطلب',         en: 'Order cancelled'        },
+  order_returned:         { ar: 'تم ارتجاع الطلب',        en: 'Order returned'         },
   status_updated:         { ar: 'تم تغيير الحالة',        en: 'Status updated'         },
 };
 

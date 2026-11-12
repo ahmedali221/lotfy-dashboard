@@ -6,10 +6,10 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { useCursorPagination } from '@/lib/pagination';
-import { CursorPager } from '@/components/admin/CursorPager';
+import { useInfiniteList } from '@/lib/pagination';
+import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 interface Brand {
   id: number;
@@ -20,10 +20,10 @@ export default function AdminBrandsPage() {
   const { language } = useLanguage();
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Rows load in batches as the list scrolls (cursor pagination, no page numbers).
+  const list = useInfiniteList<Brand>(PAGE_SIZE);
+  const { items: brands, loading, load } = list;
   const [error, setError] = useState('');
-  const pager = useCursorPagination();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -34,16 +34,13 @@ export default function AdminBrandsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const fetchBrands = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
-      setBrands(await pager.fetchPage<Brand>('/api/catalog/brands/', { page_size: PAGE_SIZE }));
+      await load('/api/catalog/brands/', {});
     } catch {
       setError(t('فشل تحميل الماركات', 'Failed to load brands'));
-    } finally {
-      setLoading(false);
     }
-  }, [language, pager.fetchPage]);
+  }, [language, load]);
 
   useEffect(() => {
     fetchBrands();
@@ -152,7 +149,7 @@ export default function AdminBrandsPage() {
                 <>
                     {brands.map((brand, idx) => (
                       <tr key={brand.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">{idx + 1}</td>
                         <td className="px-5 py-4 text-sm font-medium text-secondary">{brand.name}</td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-1.5">
@@ -178,14 +175,12 @@ export default function AdminBrandsPage() {
               )}
             </tbody>
           </table>
-          <CursorPager
+          <InfiniteScrollSentinel
             className="p-4 border-t border-border"
-            pageNumber={pager.pageNumber}
-            hasNext={pager.hasNext}
-            hasPrevious={pager.hasPrevious}
-            onNext={pager.goNext}
-            onPrevious={pager.goPrevious}
-            disabled={loading}
+            hasMore={list.hasMore}
+            loading={list.loadingMore}
+            failed={list.loadMoreFailed}
+            onLoadMore={list.loadMore}
           />
         </div>
       </div>

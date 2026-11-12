@@ -8,7 +8,7 @@ import api from '@/lib/axios';
 import { type OrderStatus, getOrderStatusConfig } from '@/lib/orderStatus';
 import {
   ShoppingCart, Package, AlertTriangle, Truck,
-  CheckCircle, Clock, Eye, XCircle, Wallet,
+  CheckCircle, Clock, Eye, XCircle, Wallet, Ban, Undo2,
 } from 'lucide-react';
 
 interface StaffDashboard {
@@ -18,6 +18,8 @@ interface StaffDashboard {
   picked_up_orders: number;
   low_stock_products: number;
   deposited_orders?: number;
+  cancelled_orders?: number;
+  returned_orders?: number;
   // The backend does not return these yet (no visits-count endpoint exists);
   // their cards appear automatically once it does.
   total_products?: number;
@@ -132,6 +134,12 @@ export default function DashboardPage() {
       : []),
     { label: t('جاهز للاستلام', 'Ready to Pick Up'), value: dashboard?.ready_to_pick_up_orders,  icon: Truck,        color: 'text-green-600',  bg: 'bg-green-50'  },
     { label: t('تم الاستلام', 'Picked Up'),          value: dashboard?.picked_up_orders,         icon: CheckCircle,  color: 'text-gray-600',   bg: 'bg-gray-50'   },
+    ...(dashboard?.cancelled_orders !== undefined
+      ? [{ label: t('ملغي', 'Cancelled'),            value: dashboard.cancelled_orders,          icon: Ban,          color: 'text-orange-600', bg: 'bg-orange-50' }]
+      : []),
+    ...(dashboard?.returned_orders !== undefined
+      ? [{ label: t('مرتجع', 'Returned'),            value: dashboard.returned_orders,           icon: Undo2,        color: 'text-amber-700',  bg: 'bg-amber-50'  }]
+      : []),
   ];
 
   return (

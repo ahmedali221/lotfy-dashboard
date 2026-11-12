@@ -1,16 +1,7 @@
-import { useCallback, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '@/lib/axios';
-import { useSyncUrlParams } from '@/lib/useUrlParams';
-import { scrollAdminToTop } from '@/lib/listScroll';
 
-export interface CursorPage<T> {
-  next: string | null;
-  previous: string | null;
-  results: T[];
-}
-
-// The API returns absolute `next`/`previous` URLs. Keep only path + query so the
+// The API returns absolute `next` URLs. Keep only path + query so the
 // request still goes through `api` (base URL, auth header, token refresh).
 // The cursor token itself is opaque and is never built or edited here.
 export const toApiPath = (url: string) => {
@@ -19,7 +10,7 @@ export const toApiPath = (url: string) => {
 };
 
 // Load every page of a cursor-paginated list. Use for small reference lists
-// (brands, payment methods, staff...) that the page filters/slices locally.
+// (brand dropdowns, order events...) that the page needs in full.
 export async function fetchAllPages<T>(url: string, params: Record<string, unknown> = {}): Promise<T[]> {
   let { data } = await api.get(url, { params: { page_size: 100, ...params } });
   if (Array.isArray(data)) return data as T[];
@@ -31,56 +22,81 @@ export async function fetchAllPages<T>(url: string, params: Record<string, unkno
   return items;
 }
 
-// Previous/next navigation over a cursor-paginated endpoint.
-// `cursor` is null on the first page; call `reset()` when filters, search or
-// ordering change so the list starts over from the first page.
-// The cursor and page number live in the URL so Back returns to the same page.
-export function useCursorPagination() {
-  const searchParams = useSearchParams();
-  // toApiPath drops any host, so a crafted ?cursor= link cannot send the auth header elsewhere.
-  const [cursor, setCursor] = useState<string | null>(() => {
-    const fromUrl = searchParams.get('cursor');
-    return fromUrl ? toApiPath(fromUrl) : null;
-  });
-  const [pageNumber, setPageNumber] = useState(() => Number(searchParams.get('page')) || 1);
+const MAX_PAGE_SIZE = 100;
+const SIZE_KEY = 'admin:infiniteList:';
 
-  useSyncUrlParams({ cursor, page: pageNumber > 1 ? String(pageNumber) : null });
-  const [links, setLinks] = useState<{ next: string | null; previous: string | null }>({ next: null, previous: null });
+const currentListKey = () => SIZE_KEY + window.location.pathname + window.location.search;
 
-  const reset = useCallback(() => {
-    setCursor(null);
-    setPageNumber(1);
-  }, []);
+function readSavedSize(): number {
+  try {
+    return Number(sessionStorage.getItem(currentListKey())) || 0;
+  } catch {
+    return 0;
+  }
+}
 
-  const goNext = () => {
-    if (!links.next) return;
-    setCursor(toApiPath(links.next));
-    setPageNumber(n => n + 1);
-    scrollAdminToTop();
-  };
+function saveSize(size: number) {
+  try {
+    sessionStorage.setItem(currentListKey(), String(size));
+  } catch { /* storage unavailable: Back reloads only the first batch */ }
+}
 
-  const goPrevious = () => {
-    if (!links.previous) return;
-    setCursor(toApiPath(links.previous));
-    setPageNumber(n => Math.max(1, n - 1));
-    scrollAdminToTop();
-  };
+// Infinite scroll over a cursor-paginated endpoint. `load` fetches the first
+// batch (call it again when filters change); `loadMore` follows the `next`
+// cursor link and appends. The loaded count is remembered per URL, so Back from
+// a detail page reloads enough rows to reach the saved scroll position (up to 100).
+export function useInfiniteList<T>(pageSize: number) {
+  const [items, setItems] = useState<T[]>([]);
+  const [next, setNext] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
+  // Responses from an older `load` (filters changed meanwhile) are dropped.
+  const request = useRef(0);
 
-  // Fetch the current page: the stored cursor URL already carries the filters.
-  const fetchPage = useCallback(async <T,>(url: string, params: Record<string, unknown>): Promise<T[]> => {
-    const { data } = cursor ? await api.get(cursor) : await api.get(url, { params });
-    setLinks({ next: data.next ?? null, previous: data.previous ?? null });
-    return (data.results ?? data) as T[];
-  }, [cursor]);
+  const load = useCallback(async (url: string, params: Record<string, unknown>) => {
+    const id = ++request.current;
+    setLoading(true);
+    setNext(null);
+    setLoadingMore(false);
+    setLoadMoreFailed(false);
+    try {
+      const size = Math.min(MAX_PAGE_SIZE, Math.max(pageSize, readSavedSize()));
+      const { data } = await api.get(url, { params: { ...params, page_size: size } });
+      if (id !== request.current) return;
+      setItems(data.results ?? data);
+      setNext(data.next ?? null);
+    } catch (err) {
+      if (id !== request.current) return;
+      setItems([]);
+      throw err;
+    } finally {
+      if (id === request.current) setLoading(false);
+    }
+  }, [pageSize]);
 
-  return {
-    cursor,
-    pageNumber,
-    hasNext: !!links.next,
-    hasPrevious: !!links.previous,
-    goNext,
-    goPrevious,
-    reset,
-    fetchPage,
-  };
+  const loadMore = useCallback(async () => {
+    if (!next || loading || loadingMore) return;
+    const id = request.current;
+    setLoadingMore(true);
+    setLoadMoreFailed(false);
+    try {
+      const { data } = await api.get(toApiPath(next));
+      if (id !== request.current) return;
+      setItems(prev => [...prev, ...data.results]);
+      setNext(data.next ?? null);
+    } catch {
+      if (id === request.current) setLoadMoreFailed(true);
+    } finally {
+      if (id === request.current) setLoadingMore(false);
+    }
+  }, [next, loading, loadingMore]);
+
+  useEffect(() => {
+    if (!loading) saveSize(items.length);
+  }, [items, loading]);
+
+  // setItems lets the page patch or drop a row in place after an action,
+  // without reloading and losing the rows already scrolled through.
+  return { items, setItems, loading, loadingMore, loadMoreFailed, hasMore: !!next, load, loadMore };
 }

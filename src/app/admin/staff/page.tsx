@@ -7,10 +7,10 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Trash2, Users, Eye } from 'lucide-react';
 import api from '@/lib/axios';
-import { useCursorPagination } from '@/lib/pagination';
-import { CursorPager } from '@/components/admin/CursorPager';
+import { useInfiniteList } from '@/lib/pagination';
+import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 interface StaffMember {
   id: number;
@@ -34,23 +34,20 @@ export default function AdminStaffPage() {
     } catch { router.replace('/admin/dashboard'); }
   }, [router]);
 
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Rows load in batches as the list scrolls (cursor pagination, no page numbers).
+  const list = useInfiniteList<StaffMember>(PAGE_SIZE);
+  const { items: staff, loading, load } = list;
   const [error, setError] = useState('');
-  const pager = useCursorPagination();
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const fetchStaff = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
-      setStaff(await pager.fetchPage<StaffMember>('/api/auth/staff/', { page_size: PAGE_SIZE }));
+      await load('/api/auth/staff/', {});
     } catch {
       setError(t('فشل تحميل الموظفين', 'Failed to load staff'));
-    } finally {
-      setLoading(false);
     }
-  }, [language, pager.fetchPage]);
+  }, [language, load]);
 
   useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
@@ -120,7 +117,7 @@ export default function AdminStaffPage() {
                 <>
                   {staff.map((member, idx) => (
                     <tr key={member.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">{idx + 1}</td>
                       <td className="px-5 py-4 text-sm font-medium text-secondary">{member.name}</td>
                       <td className="px-5 py-4 text-sm text-muted-foreground">{member.email}</td>
                       <td className="px-5 py-4">
@@ -156,14 +153,12 @@ export default function AdminStaffPage() {
               )}
             </tbody>
           </table>
-          <CursorPager
+          <InfiniteScrollSentinel
             className="p-4 border-t border-border"
-            pageNumber={pager.pageNumber}
-            hasNext={pager.hasNext}
-            hasPrevious={pager.hasPrevious}
-            onNext={pager.goNext}
-            onPrevious={pager.goPrevious}
-            disabled={loading}
+            hasMore={list.hasMore}
+            loading={list.loadingMore}
+            failed={list.loadMoreFailed}
+            onLoadMore={list.loadMore}
           />
         </div>
       </div>

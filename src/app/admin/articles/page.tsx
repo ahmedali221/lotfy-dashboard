@@ -8,9 +8,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { useCursorPagination } from '@/lib/pagination';
+import { useInfiniteList } from '@/lib/pagination';
 import { useSyncUrlParams } from '@/lib/useUrlParams';
-import { CursorPager } from '@/components/admin/CursorPager';
+import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
 
 interface ApiArticleSection {
   id?: number;
@@ -41,7 +41,7 @@ interface ArticleForm {
   sections: ApiArticleSection[];
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://165.227.137.145:8080';
 
 function resolveImageUrl(url: string | null): string {
@@ -63,10 +63,9 @@ export default function AdminArticlesPage() {
   const { language } = useLanguage();
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
-  const [articles, setArticles] = useState<ApiArticle[]>([]);
-  const pager = useCursorPagination();
-  const { fetchPage } = pager;
-  const [loading, setLoading] = useState(true);
+  // Rows load in batches as the list scrolls (cursor pagination, no page numbers).
+  const list = useInfiniteList<ApiArticle>(PAGE_SIZE);
+  const { items: articles, loading, load } = list;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   // Kept in the URL so Back from an article restores it.
@@ -85,18 +84,15 @@ export default function AdminArticlesPage() {
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const fetchArticles = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
-      const params: Record<string, string | number> = { page_size: PAGE_SIZE };
+      const params: Record<string, string | number> = {};
       if (searchTerm) params.search = searchTerm;
-      setArticles(await fetchPage<ApiArticle>('/api/articles/', params));
+      await load('/api/articles/', params);
     } catch {
       setError(t('فشل تحميل المقالات', 'Failed to load articles'));
-    } finally {
-      setLoading(false);
     }
-  }, [fetchPage, searchTerm, language]);
+  }, [load, searchTerm, language]);
 
   useEffect(() => { fetchArticles(); }, [fetchArticles]);
 
@@ -254,7 +250,7 @@ export default function AdminArticlesPage() {
             <input
               type="text"
               value={searchTerm}
-              onChange={e => { pager.reset(); setSearchTerm(e.target.value); }}
+              onChange={e => setSearchTerm(e.target.value)}
               placeholder={t('البحث في المقالات...', 'Search articles...')}
               className="w-full ps-10 pe-4 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             />
@@ -351,15 +347,12 @@ export default function AdminArticlesPage() {
             </table>
           </div>
 
-          {/* Pagination */}
-          <CursorPager
+          <InfiniteScrollSentinel
             className="px-5 py-4 border-t border-border"
-            pageNumber={pager.pageNumber}
-            hasNext={pager.hasNext}
-            hasPrevious={pager.hasPrevious}
-            onNext={pager.goNext}
-            onPrevious={pager.goPrevious}
-            disabled={loading}
+            hasMore={list.hasMore}
+            loading={list.loadingMore}
+            failed={list.loadMoreFailed}
+            onLoadMore={list.loadMore}
           />
         </div>
       </div>

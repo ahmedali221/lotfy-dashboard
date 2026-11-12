@@ -7,11 +7,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, Plus, Pencil, PowerOff, Package, AlertTriangle, LayoutList, LayoutGrid, Percent, Eye, Trash2, RotateCcw } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { useCursorPagination } from '@/lib/pagination';
+import { fetchAllPages, useInfiniteList } from '@/lib/pagination';
 import { useSyncUrlParams } from '@/lib/useUrlParams';
 import { rememberListPosition, useRestoreListScroll } from '@/lib/listScroll';
 import { discountPctOf } from '@/lib/discount';
-import { CursorPager } from '@/components/admin/CursorPager';
+import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
 import { BulkDiscountModal } from './_components/BulkDiscountModal';
 
 interface ApiBrand {
@@ -62,6 +62,14 @@ const STATUS_PARAMS: Record<StatusFilter, Record<string, string>> = {
   deleted:  { is_deleted: 'true' },
 };
 
+// Same rules as STATUS_PARAMS, applied to a row after an action changes it.
+const STATUS_MATCH: Record<StatusFilter, (p: ApiProduct) => boolean> = {
+  all:      p => !p.is_deleted,
+  active:   p => p.is_active && !p.is_deleted,
+  inactive: p => !p.is_active && !p.is_deleted,
+  deleted:  p => p.is_deleted,
+};
+
 // <input type="date"> value (local day) to an ISO datetime at the start or end of that day.
 const dayBoundary = (day: string, end: boolean) =>
   new Date(`${day}T${end ? '23:59:59.999' : '00:00:00'}`).toISOString();
@@ -79,7 +87,7 @@ const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
   light_filters:      { ar: 'فلاتر ضوئية',     en: 'Light Filters'        },
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
 const GENDER_LABELS: Record<string, { ar: string; en: string }> = {
   male:   { ar: 'رجالي',    en: 'Male'   },
@@ -102,17 +110,17 @@ export default function AdminProductsPage() {
   const searchParams = useSearchParams();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => searchParams.get('view') === 'grid' ? 'grid' : 'list');
 
-  const [products, setProducts] = useState<ApiProduct[]>([]);
   const [lowStockCount, setLowStockCount] = useState(0);
-  const pager = useCursorPagination();
-  const { fetchPage, reset: resetPager } = pager;
-  const [loading, setLoading] = useState(true);
+  // Rows load in batches as the list scrolls (cursor pagination, no page numbers).
+  const list = useInfiniteList<ApiProduct>(PAGE_SIZE);
+  const { items: products, setItems: setProducts, loading, load } = list;
   const [error, setError] = useState('');
 
   // Filters live in the URL so Back from a product restores them.
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') ?? '');
   const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get('category') ?? 'all');
   const [colourFilter, setColourFilter] = useState(() => searchParams.get('colour') ?? '');
+  const [brandFilter, setBrandFilter] = useState(() => searchParams.get('brand') ?? '');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
     const s = searchParams.get('status');
     return s && s in STATUS_PARAMS ? s as StatusFilter : 'all';
@@ -123,34 +131,36 @@ export default function AdminProductsPage() {
   const [searchInput, setSearchInput] = useState(searchTerm);
   useEffect(() => {
     if (searchInput === searchTerm) return;
-    const timer = setTimeout(() => { resetPager(); setSearchTerm(searchInput); }, 400);
+    const timer = setTimeout(() => setSearchTerm(searchInput), 400);
     return () => clearTimeout(timer);
-  }, [searchInput, searchTerm, resetPager]);
+  }, [searchInput, searchTerm]);
   useSyncUrlParams({
     q: searchTerm,
     category: categoryFilter === 'all' ? null : categoryFilter,
     colour: colourFilter,
+    brand: brandFilter,
     status: statusFilter === 'all' ? null : statusFilter,
     visits_from: visitsFrom,
     visits_to: visitsTo,
     view: viewMode === 'grid' ? 'grid' : null,
   });
   const [availableColours, setAvailableColours] = useState<string[]>([]);
+  const [availableBrands, setAvailableBrands] = useState<ApiBrand[]>([]);
 
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [showDiscount, setShowDiscount] = useState(false);
 
   const fetchProducts = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
       // Newest first by default (ids follow creation order).
-      const params: Record<string, string | number> = { page_size: PAGE_SIZE, ordering: '-id', ...STATUS_PARAMS[statusFilter] };
+      const params: Record<string, string | number> = { ordering: '-id', ...STATUS_PARAMS[statusFilter] };
       // visits_from only narrows visits_count; it does not filter products.
       if (visitsFrom) params.visits_from = dayBoundary(visitsFrom, false);
       if (visitsTo) params.visits_to = dayBoundary(visitsTo, true);
       if (searchTerm) params.name = searchTerm;
       if (colourFilter) params.colour = colourFilter;
+      if (brandFilter) params.brand = brandFilter;
       if (categoryFilter === 'glasses_medical') {
         params.category = 'glasses';
         params.lens_type = 'medical';
@@ -160,13 +170,11 @@ export default function AdminProductsPage() {
       } else if (categoryFilter !== 'all') {
         params.category = categoryFilter;
       }
-      setProducts(await fetchPage<ApiProduct>('/api/catalog/products/', params));
+      await load('/api/catalog/products/', params);
     } catch {
       setError(language === 'ar' ? 'فشل تحميل المنتجات' : 'Failed to load products');
-    } finally {
-      setLoading(false);
     }
-  }, [fetchPage, searchTerm, categoryFilter, colourFilter, statusFilter, visitsFrom, visitsTo, language]);
+  }, [load, searchTerm, categoryFilter, colourFilter, brandFilter, statusFilter, visitsFrom, visitsTo, language]);
 
   useEffect(() => {
     fetchProducts();
@@ -174,6 +182,9 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     api.get('/api/catalog/products/colours/').then(r => setAvailableColours(r.data)).catch(() => {});
+    fetchAllPages<ApiBrand>('/api/catalog/brands/')
+      .then(bs => setAvailableBrands(bs.sort((a, b) => a.name.localeCompare(b.name, 'ar'))))
+      .catch(() => {});
     // The list no longer returns a total count, so the low-stock total comes from the staff dashboard stats.
     api.get('/api/orders/staff/dashboard/').then(r => setLowStockCount(r.data.low_stock_products ?? 0)).catch(() => {});
   }, []);
@@ -197,10 +208,21 @@ export default function AdminProductsPage() {
     const { type, id } = pendingAction;
     setPendingAction(null);
     try {
-      if (type === 'delete') await api.delete(`/api/catalog/products/${id}/`);
-      else if (type === 'restore') await api.post(`/api/catalog/products/${id}/restore/`);
-      else await api.post(`/api/catalog/products/${id}/toggle-active/`);
-      fetchProducts();
+      let changed: Partial<ApiProduct>;
+      if (type === 'delete') {
+        await api.delete(`/api/catalog/products/${id}/`);
+        changed = { is_deleted: true };
+      } else {
+        const path = type === 'restore' ? 'restore' : 'toggle-active';
+        ({ data: changed } = await api.post<ApiProduct>(`/api/catalog/products/${id}/${path}/`));
+      }
+      // Patch the row in place, or drop it if it left the status filter, so rows
+      // already loaded by scrolling stay put. Action responses omit visits_count; keep the old one.
+      setProducts(prev => prev.flatMap(p => {
+        if (p.id !== id) return [p];
+        const updated = { ...p, ...changed };
+        return STATUS_MATCH[statusFilter](updated) ? [updated] : [];
+      }));
     } catch (err) {
       const fallback = type === 'delete'
         ? { ar: 'فشل حذف المنتج', en: 'Failed to delete product' }
@@ -242,7 +264,7 @@ export default function AdminProductsPage() {
                 type="date"
                 value={visitsFrom}
                 max={visitsTo || undefined}
-                onChange={e => { pager.reset(); setVisitsFrom(e.target.value); }}
+                onChange={e => setVisitsFrom(e.target.value)}
                 className="px-1.5 py-1 border border-border rounded-md text-sm text-secondary focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </label>
@@ -252,13 +274,13 @@ export default function AdminProductsPage() {
                 type="date"
                 value={visitsTo}
                 min={visitsFrom || undefined}
-                onChange={e => { pager.reset(); setVisitsTo(e.target.value); }}
+                onChange={e => setVisitsTo(e.target.value)}
                 className="px-1.5 py-1 border border-border rounded-md text-sm text-secondary focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </label>
             {(visitsFrom || visitsTo) && (
               <button
-                onClick={() => { pager.reset(); setVisitsFrom(''); setVisitsTo(''); }}
+                onClick={() => { setVisitsFrom(''); setVisitsTo(''); }}
                 className="text-xs text-primary hover:underline"
               >
                 {t('مسح', 'Clear')}
@@ -306,17 +328,29 @@ export default function AdminProductsPage() {
           </div>
           <select
             value={categoryFilter}
-            onChange={e => { pager.reset(); setCategoryFilter(e.target.value); }}
+            onChange={e => setCategoryFilter(e.target.value)}
             className="w-full md:w-52 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
           >
             {(['all', 'glasses_medical', 'glasses_sunglasses', 'lens', 'artificial_eyes', 'light_filters'] as const).map(c => (
               <option key={c} value={c}>{catLabel(c)}</option>
             ))}
           </select>
+          {availableBrands.length > 0 && (
+            <select
+              value={brandFilter}
+              onChange={e => setBrandFilter(e.target.value)}
+              className="w-full md:w-44 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            >
+              <option value="">{t('كل الماركات', 'All Brands')}</option>
+              {availableBrands.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
           {availableColours.length > 0 && (
             <select
               value={colourFilter}
-              onChange={e => { pager.reset(); setColourFilter(e.target.value); }}
+              onChange={e => setColourFilter(e.target.value)}
               className="w-full md:w-44 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             >
               <option value="">{t('كل الألوان', 'All Colours')}</option>
@@ -327,7 +361,7 @@ export default function AdminProductsPage() {
           )}
           <select
             value={statusFilter}
-            onChange={e => { pager.reset(); setStatusFilter(e.target.value as StatusFilter); }}
+            onChange={e => setStatusFilter(e.target.value as StatusFilter)}
             className="w-full md:w-40 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
           >
             {(Object.keys(STATUS_LABELS) as StatusFilter[]).map(s => (
@@ -483,14 +517,12 @@ export default function AdminProductsPage() {
                 </tbody>
               </table>
             </div>
-            <CursorPager
+            <InfiniteScrollSentinel
               className="p-4 border-t border-border"
-              pageNumber={pager.pageNumber}
-              hasNext={pager.hasNext}
-              hasPrevious={pager.hasPrevious}
-              onNext={pager.goNext}
-              onPrevious={pager.goPrevious}
-              disabled={loading}
+              hasMore={list.hasMore}
+              loading={list.loadingMore}
+              failed={list.loadMoreFailed}
+              onLoadMore={list.loadMore}
             />
           </div>
         )}
@@ -603,14 +635,12 @@ export default function AdminProductsPage() {
                 ))}
               </div>
             )}
-            <CursorPager
+            <InfiniteScrollSentinel
               className="mt-4"
-              pageNumber={pager.pageNumber}
-              hasNext={pager.hasNext}
-              hasPrevious={pager.hasPrevious}
-              onNext={pager.goNext}
-              onPrevious={pager.goPrevious}
-              disabled={loading}
+              hasMore={list.hasMore}
+              loading={list.loadingMore}
+              failed={list.loadMoreFailed}
+              onLoadMore={list.loadMore}
             />
           </div>
         )}
@@ -620,6 +650,7 @@ export default function AdminProductsPage() {
         <BulkDiscountModal
           language={language}
           categoryLabels={CATEGORY_LABELS}
+          brands={availableBrands}
           onClose={() => setShowDiscount(false)}
           onApplied={fetchProducts}
         />

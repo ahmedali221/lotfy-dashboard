@@ -6,16 +6,16 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   Eye, Trash2, DollarSign, ShoppingCart, Truck,
-  CheckCircle, Clock, Settings2, Pencil,
+  CheckCircle, Clock, Settings2, Pencil, Ban, Undo2,
 } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { useCursorPagination } from '@/lib/pagination';
+import { useInfiniteList } from '@/lib/pagination';
 import { rememberListPosition, useRestoreListScroll } from '@/lib/listScroll';
 import { useSyncUrlParams } from '@/lib/useUrlParams';
-import { CursorPager } from '@/components/admin/CursorPager';
+import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
 import { orderTotals } from '@/lib/orderTotals';
-import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit } from '@/lib/orderStatus';
+import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, confirmTransition } from '@/lib/orderStatus';
 
 interface OrderItem {
   id: number;
@@ -48,10 +48,12 @@ interface StaffDashboard {
   approved_orders: number;
   ready_to_pick_up_orders: number;
   picked_up_orders: number;
+  cancelled_orders?: number;
+  returned_orders?: number;
   low_stock_products: number;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
 const STATUS_OPTIONS: Array<{ id: OrderStatus | 'all'; ar: string; en: string }> = [
   { id: 'all', ar: 'الكل', en: 'All' },
@@ -65,10 +67,9 @@ export default function AdminOrdersPage() {
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
   // List state
-  const [orders, setOrders] = useState<OrderRead[]>([]);
-  const pager = useCursorPagination();
-  const { fetchPage } = pager;
-  const [loading, setLoading] = useState(true);
+  // Rows load in batches as the list scrolls (cursor pagination, no page numbers).
+  const list = useInfiniteList<OrderRead>(PAGE_SIZE);
+  const { items: orders, loading, load } = list;
   useRestoreListScroll(!loading);
   const [error, setError] = useState('');
 
@@ -132,18 +133,15 @@ export default function AdminOrdersPage() {
   };
 
   const fetchOrders = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
-      const params: Record<string, string | number> = { page_size: PAGE_SIZE };
+      const params: Record<string, string | number> = {};
       if (statusFilter !== 'all') params.status = statusFilter;
-      setOrders(await fetchPage<OrderRead>('/api/orders/', params));
+      await load('/api/orders/', params);
     } catch {
       setError(t('فشل تحميل الطلبات', 'Failed to load orders'));
-    } finally {
-      setLoading(false);
     }
-  }, [fetchPage, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [load, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
@@ -156,10 +154,12 @@ export default function AdminOrdersPage() {
 
   // Status transition
   const handleStatusTransition = async (orderId: number, newStatus: OrderStatus) => {
+    const note = confirmTransition(newStatus, t);
+    if (note === null) return;
     setTransitioning(orderId);
     setTransitionError(null);
     try {
-      await api.post(`/api/orders/${orderId}/transition-status/`, { status: newStatus });
+      await api.post(`/api/orders/${orderId}/transition-status/`, { status: newStatus, note });
       fetchOrders();
       fetchStats();
     } catch (err: unknown) {
@@ -216,6 +216,8 @@ export default function AdminOrdersPage() {
     { label: t('معتمد', 'Approved'),                 value: dashStats?.approved_orders,          icon: CheckCircle,   bg: 'bg-indigo-500' },
     { label: t('جاهز للاستلام', 'Ready to Pick Up'), value: dashStats?.ready_to_pick_up_orders,  icon: Truck,         bg: 'bg-green-500'  },
     { label: t('تم الاستلام', 'Picked Up'),          value: dashStats?.picked_up_orders,         icon: ShoppingCart,  bg: 'bg-gray-500'   },
+    { label: t('ملغي', 'Cancelled'),                 value: dashStats?.cancelled_orders,         icon: Ban,           bg: 'bg-orange-500' },
+    { label: t('مرتجع', 'Returned'),                 value: dashStats?.returned_orders,          icon: Undo2,         bg: 'bg-amber-500'  },
   ];
 
   return (
@@ -252,7 +254,7 @@ export default function AdminOrdersPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
           {statsCards.map((s, i) => {
             const Icon = s.icon;
             return (
@@ -278,7 +280,7 @@ export default function AdminOrdersPage() {
         <div className="bg-card rounded-xl p-4 shadow-sm border border-border">
           <select
             value={statusFilter}
-            onChange={e => { pager.reset(); setStatusFilter(e.target.value as OrderStatus | 'all'); }}
+            onChange={e => setStatusFilter(e.target.value as OrderStatus | 'all')}
             className="w-full md:w-56 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
           >
             {STATUS_OPTIONS.map(o => (
@@ -405,15 +407,12 @@ export default function AdminOrdersPage() {
             </table>
           </div>
 
-          {/* Pagination */}
-          <CursorPager
+          <InfiniteScrollSentinel
             className="p-4 border-t border-border"
-            pageNumber={pager.pageNumber}
-            hasNext={pager.hasNext}
-            hasPrevious={pager.hasPrevious}
-            onNext={pager.goNext}
-            onPrevious={pager.goPrevious}
-            disabled={loading}
+            hasMore={list.hasMore}
+            loading={list.loadingMore}
+            failed={list.loadMoreFailed}
+            onLoadMore={list.loadMore}
           />
         </div>
       </div>

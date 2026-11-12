@@ -6,10 +6,10 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Plus, Pencil, Trash2, CreditCard, ToggleLeft, ToggleRight } from 'lucide-react';
 import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
-import { useCursorPagination } from '@/lib/pagination';
-import { CursorPager } from '@/components/admin/CursorPager';
+import { useInfiniteList } from '@/lib/pagination';
+import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 20;
 
 interface PaymentMethod {
   id: number;
@@ -22,10 +22,10 @@ export default function AdminPaymentMethodsPage() {
   const { language } = useLanguage();
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
 
-  const [methods, setMethods] = useState<PaymentMethod[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Rows load in batches as the list scrolls (cursor pagination, no page numbers).
+  const list = useInfiniteList<PaymentMethod>(PAGE_SIZE);
+  const { items: methods, loading, load } = list;
   const [error, setError] = useState('');
-  const pager = useCursorPagination();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -39,16 +39,13 @@ export default function AdminPaymentMethodsPage() {
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
   const fetchMethods = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
-      setMethods(await pager.fetchPage<PaymentMethod>('/api/orders/payment-methods/', { page_size: PAGE_SIZE }));
+      await load('/api/orders/payment-methods/', {});
     } catch {
       setError(t('فشل تحميل طرق الدفع', 'Failed to load payment methods'));
-    } finally {
-      setLoading(false);
     }
-  }, [language, pager.fetchPage]);
+  }, [language, load]);
 
   useEffect(() => {
     fetchMethods();
@@ -178,7 +175,7 @@ export default function AdminPaymentMethodsPage() {
                 <>
                   {methods.map((m, idx) => (
                     <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4 text-sm text-muted-foreground">{(pager.pageNumber - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">{idx + 1}</td>
                       <td className="px-5 py-4 text-sm font-medium text-secondary">{m.name}</td>
                       <td className="px-5 py-4 text-sm text-muted-foreground">{m.number || '—'}</td>
                       <td className="px-5 py-4">
@@ -222,14 +219,12 @@ export default function AdminPaymentMethodsPage() {
               )}
             </tbody>
           </table>
-          <CursorPager
+          <InfiniteScrollSentinel
             className="p-4 border-t border-border"
-            pageNumber={pager.pageNumber}
-            hasNext={pager.hasNext}
-            hasPrevious={pager.hasPrevious}
-            onNext={pager.goNext}
-            onPrevious={pager.goPrevious}
-            disabled={loading}
+            hasMore={list.hasMore}
+            loading={list.loadingMore}
+            failed={list.loadMoreFailed}
+            onLoadMore={list.loadMore}
           />
         </div>
       </div>

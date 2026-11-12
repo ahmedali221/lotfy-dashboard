@@ -8,7 +8,7 @@ import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { fetchAllPages } from '@/lib/pagination';
 import { orderTotals } from '@/lib/orderTotals';
-import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, canChangePaymentProof, getOrderEventLabel } from '@/lib/orderStatus';
+import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, canChangePaymentProof, getOrderEventLabel, confirmTransition } from '@/lib/orderStatus';
 import {
   ArrowRight, ArrowLeft, Clock,
   DollarSign, FileText, Package,
@@ -59,6 +59,8 @@ const STATUS_TRANSITION_LABELS: Partial<Record<OrderStatus, { ar: string; en: st
   rejected:         { ar: 'رفض الطلب',          en: 'Reject Order',      color: 'bg-red-600 hover:bg-red-700 text-white'       },
   ready_to_pick_up: { ar: 'تعيين جاهز للاستلام', en: 'Mark Ready',       color: 'bg-green-600 hover:bg-green-700 text-white'   },
   picked_up:        { ar: 'تأكيد الاستلام',     en: 'Mark Picked Up',    color: 'bg-gray-600 hover:bg-gray-700 text-white'     },
+  cancelled:        { ar: 'إلغاء الطلب',        en: 'Cancel Order',      color: 'bg-orange-600 hover:bg-orange-700 text-white' },
+  returned:         { ar: 'تسجيل مرتجع',        en: 'Mark Returned',     color: 'bg-amber-600 hover:bg-amber-700 text-white'   },
 };
 
 export default function OrderDetailPage() {
@@ -148,10 +150,12 @@ export default function OrderDetailPage() {
   useEffect(() => { fetchOrder(); }, [fetchOrder]);
 
   const handleTransition = async (newStatus: OrderStatus) => {
+    const note = confirmTransition(newStatus, t);
+    if (note === null) return;
     setTransitioning(true);
     setTransitionError('');
     try {
-      await api.post(`/api/orders/${orderId}/transition-status/`, { status: newStatus });
+      await api.post(`/api/orders/${orderId}/transition-status/`, { status: newStatus, note });
       await fetchOrder();
     } catch (err: unknown) {
       setTransitionError(getApiError(err, language, { ar: 'فشل تغيير الحالة', en: 'Failed to change status' }));
@@ -365,13 +369,15 @@ export default function OrderDetailPage() {
                                     ) ?? null
                                   : null;
                               return imgUrl || item.product_colour_snapshot ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-col items-start gap-1.5">
                                   {imgUrl && (
-                                    <img
-                                      src={imgUrl}
-                                      alt={item.product_colour_snapshot || 'product'}
-                                      className="w-10 h-10 rounded-lg object-cover border border-border flex-shrink-0"
-                                    />
+                                    <a href={imgUrl} target="_blank" rel="noopener noreferrer" className="block group flex-shrink-0" title={t('فتح في نافذة جديدة', 'Open in new tab')}>
+                                      <img
+                                        src={imgUrl}
+                                        alt={item.product_colour_snapshot || 'product'}
+                                        className="w-32 h-32 rounded-xl object-contain bg-white border border-border group-hover:opacity-90 transition-opacity"
+                                      />
+                                    </a>
                                   )}
                                   {item.product_colour_snapshot && (
                                     <span className="text-xs text-secondary">{item.product_colour_snapshot}</span>
@@ -642,7 +648,11 @@ export default function OrderDetailPage() {
                   ? t('✓ تم إغلاق الطلب بنجاح', '✓ Order completed')
                   : order.status === 'rejected'
                     ? t('✗ تم رفض الطلب', '✗ Order rejected')
-                    : t(statusCfg.ar, statusCfg.en)}
+                    : order.status === 'cancelled'
+                      ? t('✗ تم إلغاء الطلب', '✗ Order cancelled')
+                      : order.status === 'returned'
+                        ? t('↩ تم ارتجاع الطلب', '↩ Order returned')
+                        : t(statusCfg.ar, statusCfg.en)}
               </div>
             )}
           </div>
