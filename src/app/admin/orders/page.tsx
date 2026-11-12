@@ -14,8 +14,10 @@ import { useInfiniteList } from '@/lib/pagination';
 import { rememberListPosition, useRestoreListScroll } from '@/lib/listScroll';
 import { useSyncUrlParams } from '@/lib/useUrlParams';
 import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
+import { OrderStatusDropdown } from '@/components/admin/OrderStatusDropdown';
+import { Dropdown } from '@/components/Dropdown';
 import { orderTotals } from '@/lib/orderTotals';
-import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, confirmTransition } from '@/lib/orderStatus';
+import { type OrderStatus, ORDER_STATUSES, ORDER_STATUS_CONFIG, getNextOrderStatuses, canUpdateDeposit, confirmTransition } from '@/lib/orderStatus';
 
 interface OrderItem {
   id: number;
@@ -278,15 +280,12 @@ export default function AdminOrdersPage() {
 
         {/* Filter */}
         <div className="bg-card rounded-xl p-4 shadow-sm border border-border">
-          <select
+          <Dropdown
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as OrderStatus | 'all')}
-            className="w-full md:w-56 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-          >
-            {STATUS_OPTIONS.map(o => (
-              <option key={o.id} value={o.id}>{t(o.ar, o.en)}</option>
-            ))}
-          </select>
+            onChange={setStatusFilter}
+            options={STATUS_OPTIONS.map(o => ({ value: o.id, label: t(o.ar, o.en) }))}
+            className="w-full md:w-56"
+          />
         </div>
 
         {/* Error */}
@@ -336,7 +335,6 @@ export default function AdminOrdersPage() {
                       </tr>
                     )
                     : orders.map(order => {
-                        const statusCfg = getOrderStatusConfig(order.status);
                         const nextStatuses = getNextOrderStatuses(order.status);
                         const isTransitioning = transitioning === order.id;
                         return (
@@ -354,17 +352,13 @@ export default function AdminOrdersPage() {
                             </td>
                             <td className="px-5 py-4 whitespace-nowrap">
                               <div className="space-y-1">
-                                <select
-                                  value={order.status}
-                                  disabled={isTransitioning || nextStatuses.length === 0}
-                                  onChange={e => handleStatusTransition(order.id, e.target.value as OrderStatus)}
-                                  className={`px-2 py-1 text-xs font-medium rounded-full border cursor-pointer disabled:opacity-50 disabled:cursor-default ${statusCfg.color}`}
-                                >
-                                  <option value={order.status}>{t(statusCfg.ar, statusCfg.en)}</option>
-                                  {nextStatuses.map(s => (
-                                    <option key={s} value={s}>{t(ORDER_STATUS_CONFIG[s].ar, ORDER_STATUS_CONFIG[s].en)}</option>
-                                  ))}
-                                </select>
+                                <OrderStatusDropdown
+                                  status={order.status}
+                                  nextStatuses={nextStatuses}
+                                  busy={isTransitioning}
+                                  onSelect={s => handleStatusTransition(order.id, s)}
+                                  t={t}
+                                />
                                 {transitionError?.id === order.id && (
                                   <p className="text-xs text-red-600">{transitionError.msg}</p>
                                 )}

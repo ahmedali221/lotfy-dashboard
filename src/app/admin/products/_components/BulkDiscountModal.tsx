@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Percent, Search, X } from 'lucide-react';
 import api from '@/lib/axios';
 import { fetchAllPages } from '@/lib/pagination';
+import { Dropdown } from '@/components/Dropdown';
 import { applyDiscount, basePriceOf, discountPayload, discountPctOf, isValidDiscountPct } from '@/lib/discount';
 
 interface DiscountProduct {
@@ -156,26 +157,24 @@ export function BulkDiscountModal({ language, categoryLabels, brands, onClose, o
                 className="w-full ps-10 pe-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            <select
+            <Dropdown
               value={category}
-              onChange={e => setCategory(e.target.value)}
-              className="sm:w-52 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {Object.keys(categoryLabels).map(c => (
-                <option key={c} value={c}>{categoryLabels[c][language]}</option>
-              ))}
-            </select>
+              onChange={setCategory}
+              options={Object.keys(categoryLabels).map(c => ({ value: c, label: categoryLabels[c][language] }))}
+              className="sm:w-52"
+              triggerClassName="py-2"
+            />
             {brands.length > 0 && (
-              <select
+              <Dropdown
                 value={brand}
-                onChange={e => setBrand(e.target.value)}
-                className="sm:w-52 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">{t('كل الماركات', 'All Brands')}</option>
-                {brands.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
+                onChange={setBrand}
+                options={[
+                  { value: '', label: t('كل الماركات', 'All Brands') },
+                  ...brands.map(b => ({ value: String(b.id), label: b.name })),
+                ]}
+                className="sm:w-52"
+                triggerClassName="py-2"
+              />
             )}
           </div>
           <div className="flex items-center justify-between text-sm">

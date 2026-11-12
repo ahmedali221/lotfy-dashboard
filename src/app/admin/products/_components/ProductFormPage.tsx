@@ -12,6 +12,7 @@ import { getApiError } from '@/lib/apiError';
 import { fetchAllPages } from '@/lib/pagination';
 import { applyDiscount, basePriceOf, discountPayload, discountPctOf, isValidDiscountPct } from '@/lib/discount';
 import { listReturnUrl } from '@/lib/listScroll';
+import { Dropdown } from '@/components/Dropdown';
 
 interface ApiBrand { id: number; name: string; }
 
@@ -616,14 +617,14 @@ export default function ProductFormPage({ productId }: Props) {
           {/* Brand */}
           <div>
             <label className="block text-sm font-medium text-secondary mb-1">{t('الماركة', 'Brand')}</label>
-            <select
-              value={form.brand}
-              onChange={e => setForm(f => ({ ...f, brand: e.target.value === '' ? '' : Number(e.target.value) }))}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">{t('بدون ماركة', 'No brand')}</option>
-              {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <Dropdown
+              value={String(form.brand)}
+              onChange={v => setForm(f => ({ ...f, brand: v === '' ? '' : Number(v) }))}
+              options={[
+                { value: '', label: t('بدون ماركة', 'No brand') },
+                ...brands.map(b => ({ value: String(b.id), label: b.name })),
+              ]}
+            />
           </div>
 
           {/* Category + Gender */}
@@ -632,29 +633,21 @@ export default function ProductFormPage({ productId }: Props) {
               <label className="block text-sm font-medium text-secondary mb-1">
                 {t('التصنيف', 'Category')} <span className="text-red-500">*</span>
               </label>
-              <select
+              <Dropdown
                 value={form.category}
-                onChange={e => setForm(f => ({ ...f, category: e.target.value as ProductForm['category'], frame_shape: '' }))}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                {(Object.keys(CATEGORY_LABELS) as DisplayCategory[]).map(c => (
-                  <option key={c} value={c}>{CATEGORY_LABELS[c][language]}</option>
-                ))}
-              </select>
+                onChange={v => setForm(f => ({ ...f, category: v, frame_shape: '' }))}
+                options={(Object.keys(CATEGORY_LABELS) as DisplayCategory[]).map(c => ({ value: c, label: CATEGORY_LABELS[c][language] }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-secondary mb-1">
                 {t('الجنس', 'Gender')} <span className="text-red-500">*</span>
               </label>
-              <select
+              <Dropdown
                 value={form.gender}
-                onChange={e => setForm(f => ({ ...f, gender: e.target.value as ProductForm['gender'] }))}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                {(['male', 'female', 'kids', 'unisex'] as const).map(g => (
-                  <option key={g} value={g}>{GENDER_LABELS[g][language]}</option>
-                ))}
-              </select>
+                onChange={v => setForm(f => ({ ...f, gender: v }))}
+                options={(['male', 'female', 'kids', 'unisex'] as const).map(g => ({ value: g, label: GENDER_LABELS[g][language] }))}
+              />
             </div>
           </div>
 
@@ -662,16 +655,14 @@ export default function ProductFormPage({ productId }: Props) {
           {isGlasses && (
             <div>
               <label className="block text-sm font-medium text-secondary mb-1">{t('شكل الإطار', 'Frame Shape')}</label>
-              <select
+              <Dropdown<ProductForm['frame_shape']>
                 value={form.frame_shape}
-                onChange={e => setForm(f => ({ ...f, frame_shape: e.target.value as ProductForm['frame_shape'] }))}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">{t('غير محدد', 'Not specified')}</option>
-                {(['square', 'rectangle', 'round', 'cat_eye', 'oval'] as const).map(s => (
-                  <option key={s} value={s}>{FRAME_SHAPE_LABELS[s][language]}</option>
-                ))}
-              </select>
+                onChange={v => setForm(f => ({ ...f, frame_shape: v }))}
+                options={[
+                  { value: '', label: t('غير محدد', 'Not specified') },
+                  ...(['square', 'rectangle', 'round', 'cat_eye', 'oval'] as const).map(s => ({ value: s, label: FRAME_SHAPE_LABELS[s][language] })),
+                ]}
+              />
             </div>
           )}
 

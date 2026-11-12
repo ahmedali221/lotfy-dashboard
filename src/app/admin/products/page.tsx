@@ -12,6 +12,7 @@ import { useSyncUrlParams } from '@/lib/useUrlParams';
 import { rememberListPosition, useRestoreListScroll } from '@/lib/listScroll';
 import { discountPctOf } from '@/lib/discount';
 import { InfiniteScrollSentinel } from '@/components/admin/InfiniteScrollSentinel';
+import { Dropdown } from '@/components/Dropdown';
 import { BulkDiscountModal } from './_components/BulkDiscountModal';
 
 interface ApiBrand {
@@ -326,48 +327,40 @@ export default function AdminProductsPage() {
               className="w-full ps-10 pe-4 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             />
           </div>
-          <select
+          <Dropdown
             value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
-            className="w-full md:w-52 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-          >
-            {(['all', 'glasses_medical', 'glasses_sunglasses', 'lens', 'artificial_eyes', 'light_filters'] as const).map(c => (
-              <option key={c} value={c}>{catLabel(c)}</option>
-            ))}
-          </select>
+            onChange={setCategoryFilter}
+            options={(['all', 'glasses_medical', 'glasses_sunglasses', 'lens', 'artificial_eyes', 'light_filters'] as const).map(c => ({ value: c, label: catLabel(c) }))}
+            className="w-full md:w-52"
+          />
           {availableBrands.length > 0 && (
-            <select
+            <Dropdown
               value={brandFilter}
-              onChange={e => setBrandFilter(e.target.value)}
-              className="w-full md:w-44 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-            >
-              <option value="">{t('كل الماركات', 'All Brands')}</option>
-              {availableBrands.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+              onChange={setBrandFilter}
+              options={[
+                { value: '', label: t('كل الماركات', 'All Brands') },
+                ...availableBrands.map(b => ({ value: String(b.id), label: b.name })),
+              ]}
+              className="w-full md:w-44"
+            />
           )}
           {availableColours.length > 0 && (
-            <select
+            <Dropdown
               value={colourFilter}
-              onChange={e => setColourFilter(e.target.value)}
-              className="w-full md:w-44 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-            >
-              <option value="">{t('كل الألوان', 'All Colours')}</option>
-              {availableColours.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+              onChange={setColourFilter}
+              options={[
+                { value: '', label: t('كل الألوان', 'All Colours') },
+                ...availableColours.map(c => ({ value: c, label: c })),
+              ]}
+              className="w-full md:w-44"
+            />
           )}
-          <select
+          <Dropdown
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-            className="w-full md:w-40 px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-          >
-            {(Object.keys(STATUS_LABELS) as StatusFilter[]).map(s => (
-              <option key={s} value={s}>{STATUS_LABELS[s][language]}</option>
-            ))}
-          </select>
+            onChange={setStatusFilter}
+            options={(Object.keys(STATUS_LABELS) as StatusFilter[]).map(s => ({ value: s, label: STATUS_LABELS[s][language] }))}
+            className="w-full md:w-40"
+          />
           <div className="flex items-center gap-1 border border-border rounded-lg p-1 shrink-0">
             <button
               onClick={() => setViewMode('list')}

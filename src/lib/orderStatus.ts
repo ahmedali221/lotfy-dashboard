@@ -36,6 +36,19 @@ export const NEXT_ORDER_STATUSES: Record<OrderStatus, OrderStatus[]> = {
   returned:         [],
 };
 
+// How a transition reads as an action in the status dropdown, as opposed to
+// the status name shown on the badge.
+export const ORDER_STATUS_ACTIONS: Record<OrderStatus, { ar: string; en: string }> = {
+  placed:           { ar: 'قيد الانتظار',         en: 'Placed'            },
+  approved:         { ar: 'اعتماد',               en: 'Approve'           },
+  deposited:        { ar: 'تم دفع العربون',       en: 'Deposit paid'      },
+  rejected:         { ar: 'رفض',                  en: 'Reject'            },
+  ready_to_pick_up: { ar: 'تم التجهيز للاستلام',  en: 'Ready for pickup'  },
+  picked_up:        { ar: 'تم الاستلام',          en: 'Picked up'         },
+  cancelled:        { ar: 'إلغاء',                en: 'Cancel'            },
+  returned:         { ar: 'ارتجاع',               en: 'Return'            },
+};
+
 // Cancelling or returning puts the items back in stock and cannot be undone,
 // so staff confirm it and may give a reason, which is saved on the order event.
 // Returns the reason (possibly empty) to send, or null when staff back out.
