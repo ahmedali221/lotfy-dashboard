@@ -8,7 +8,7 @@ import api from '@/lib/axios';
 import { getApiError } from '@/lib/apiError';
 import { fetchAllPages } from '@/lib/pagination';
 import { orderTotals } from '@/lib/orderTotals';
-import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, canChangePaymentProof, getOrderEventLabel, confirmTransition } from '@/lib/orderStatus';
+import { type OrderStatus, getOrderStatusConfig, getNextOrderStatuses, canUpdateDeposit, canChangePaymentProof, getOrderEventLabel, getOrderEventDetails, confirmTransition } from '@/lib/orderStatus';
 import {
   ArrowRight, ArrowLeft, Clock,
   DollarSign, FileText, Package,
@@ -30,7 +30,9 @@ interface OrderItem {
 interface OrderEvent {
   id: number;
   event_type: string;
-  performed_by: number;
+  performed_by: number | null;
+  performed_by_name?: string | null;
+  note?: string;
   meta: Record<string, unknown>;
   created: string;
 }
@@ -71,6 +73,7 @@ export default function OrderDetailPage() {
   const t = (ar: string, en: string) => language === 'ar' ? ar : en;
   const isRtl = language === 'ar';
   const BackIcon = isRtl ? ArrowRight : ArrowLeft;
+  const ChangeIcon = isRtl ? ArrowLeft : ArrowRight;
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [events, setEvents] = useState<OrderEvent[]>([]);
@@ -516,9 +519,29 @@ export default function OrderDetailPage() {
                       <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-secondary">{t(getOrderEventLabel(ev.event_type).ar, getOrderEventLabel(ev.event_type).en)}</p>
-                        {Object.keys(ev.meta).length > 0 && (
-                          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                            {JSON.stringify(ev.meta)}
+                        {getOrderEventDetails(ev.meta ?? {}, t).map(detail => (
+                          <p key={detail.label} className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-1">
+                            <span>{detail.label}:</span>
+                            {detail.from !== undefined ? (
+                              <>
+                                <span className="line-through">{detail.from}</span>
+                                <ChangeIcon className="w-3 h-3 flex-shrink-0" />
+                                <span className="font-medium text-secondary">{detail.to}</span>
+                              </>
+                            ) : (
+                              <span className="font-medium text-secondary">{detail.value}</span>
+                            )}
+                          </p>
+                        ))}
+                        {ev.performed_by_name && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {t('بواسطة', 'By')}: <span className="font-medium text-secondary">{ev.performed_by_name}</span>
+                            {ev.performed_by === order.customer && ` (${t('العميل', 'customer')})`}
+                          </p>
+                        )}
+                        {ev.note && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {t('السبب', 'Reason')}: <span className="font-medium text-secondary">{ev.note}</span>
                           </p>
                         )}
                       </div>

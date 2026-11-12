@@ -88,3 +88,83 @@ const ORDER_EVENT_LABELS: Record<string, { ar: string; en: string }> = {
 
 export const getOrderEventLabel = (eventType: string) =>
   ORDER_EVENT_LABELS[eventType] ?? { ar: eventType.replace(/_/g, ' '), en: eventType.replace(/_/g, ' ') };
+
+type Translate = (ar: string, en: string) => string;
+type MetaFormat = 'money' | 'status' | 'text' | 'proof' | 'hidden';
+
+// Event meta keys written by orders/services.py. Changes come as `old_<field>` /
+// `new_<field>` pairs; everything else is a plain value.
+const EVENT_META_FIELDS: Record<string, { ar: string; en: string; format: MetaFormat; showUnchanged?: boolean }> = {
+  status:         { ar: 'الحالة',           en: 'Status',        format: 'status' },
+  deposit_amount: { ar: 'العربون',          en: 'Deposit',       format: 'money'  },
+  payment_proof:  { ar: 'الإيصال',          en: 'Receipt',       format: 'proof'  },
+  product_name:   { ar: 'المنتج',           en: 'Product',       format: 'text', showUnchanged: true },
+  quantity:       { ar: 'الكمية',           en: 'Quantity',      format: 'text'   },
+  unit_price:     { ar: 'سعر الوحدة',       en: 'Unit price',    format: 'money'  },
+  line_total:     { ar: 'إجمالي المنتج',    en: 'Line total',    format: 'money'  },
+  order_total:    { ar: 'إجمالي المنتجات',  en: 'Items total',   format: 'money'  },
+  total_price:    { ar: 'إجمالي المنتجات',  en: 'Items total',   format: 'money'  },
+  delivery_fee:   { ar: 'رسوم التوصيل',     en: 'Delivery fee',  format: 'money'  },
+  item_count:     { ar: 'عدد المنتجات',     en: 'Items',         format: 'text'   },
+  item_id:        { ar: '',                 en: '',              format: 'hidden' },
+  product_id:     { ar: '',                 en: '',              format: 'hidden' },
+};
+
+export interface OrderEventDetail {
+  label: string;
+  value?: string;
+  from?: string;
+  to?: string;
+}
+
+const formatMetaValue = (value: unknown, format: MetaFormat, t: Translate): string => {
+  if (value === null || value === undefined || value === '') return '—';
+  if (format === 'money') return `${(parseFloat(String(value)) || 0).toLocaleString()} ${t('ج.م', 'EGP')}`;
+  if (format === 'status') {
+    const config = getOrderStatusConfig(String(value));
+    return t(config.ar, config.en);
+  }
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+};
+
+// Turns an event's raw meta into labelled lines staff can read.
+export const getOrderEventDetails = (meta: Record<string, unknown>, t: Translate): OrderEventDetail[] => {
+  const fields = [...new Set(Object.keys(meta).map(key => key.replace(/^(old|new)_/, '')))];
+  const details: OrderEventDetail[] = [];
+
+  for (const field of fields) {
+    const config = EVENT_META_FIELDS[field];
+    const format = config?.format ?? 'text';
+    if (format === 'hidden') continue;
+    const label = config ? t(config.ar, config.en) : field.replace(/_/g, ' ');
+    const oldKey = `old_${field}`;
+    const newKey = `new_${field}`;
+
+    // The file path means nothing to staff; the current receipt is shown on the page.
+    if (format === 'proof') {
+      if (meta[oldKey] && meta[oldKey] !== meta[newKey]) {
+        details.push({ label, value: t('تم استبدال إيصال سابق', 'Replaced a previous receipt') });
+      }
+      continue;
+    }
+
+    if (!(oldKey in meta) && !(newKey in meta)) {
+      details.push({ label, value: formatMetaValue(meta[field], format, t) });
+      continue;
+    }
+
+    const to = formatMetaValue(meta[newKey], format, t);
+    if (!(oldKey in meta)) {
+      details.push({ label, value: to });
+      continue;
+    }
+    const from = formatMetaValue(meta[oldKey], format, t);
+    if (from === to) {
+      if (config?.showUnchanged) details.push({ label, value: to });
+      continue;
+    }
+    details.push({ label, from, to });
+  }
+
+  return details;
+};
